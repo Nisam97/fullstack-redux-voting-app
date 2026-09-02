@@ -1,0 +1,68 @@
+.dashboard{
+    display:flex;
+    min-height:100vh;
+    background:#0f172a;
+}
+
+.sidebar{
+    width:260px;
+    background:#1e293b;
+    padding:40px 25px;
+    color:white;
+}
+
+.sidebar h2{
+    color:#38bdf8;
+    margin-bottom:40px;
+}
+
+.sidebar ul{
+    list-style:none;
+}
+
+.sidebar li{
+    padding:15px;
+    margin-bottom:10px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.sidebar li:hover{
+    background:#2563eb;
+}
+
+.content{
+    flex:1;
+    padding:50px;
+    color:white;
+}
+
+.cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:25px;
+    margin-top:40px;
+}
+
+.card{
+    background:#1e293b;
+    padding:35px;
+    border-radius:18px;
+    transition:.3s;
+}
+
+.card:hover{
+    transform:translateY(-8px);
+    box-shadow:0 15px 35px rgba(37,99,235,.25);
+}
+
+.card h2{
+    color:#38bdf8;
+    font-size:40px;
+}
+
+.card p{
+    margin-top:10px;
+    color:#cbd5e1;
+}

@@ -1,0 +1,36 @@
+.stats{
+    padding:90px 8%;
+    background:#0f1d3a;
+}
+
+.stats-container{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:25px;
+}
+
+.stat-card{
+    background:rgba(255,255,255,.05);
+    backdrop-filter:blur(15px);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:40px;
+    text-align:center;
+    transition:.4s;
+}
+
+.stat-card:hover{
+    transform:translateY(-10px);
+    box-shadow:0 20px 40px rgba(0,0,0,.3);
+}
+
+.stat-card h2{
+    color:#2f80ed;
+    font-size:48px;
+    margin-bottom:10px;
+}
+
+.stat-card p{
+    color:#d7d7d7;
+    font-size:18px;
+}

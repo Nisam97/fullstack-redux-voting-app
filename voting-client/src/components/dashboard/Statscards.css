@@ -1,0 +1,31 @@
+.stats-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:25px;
+}
+
+.stats-card{
+    background:#1e293b;
+    padding:30px;
+    border-radius:18px;
+    color:white;
+    transition:.3s;
+}
+
+.stats-card:hover{
+    transform:translateY(-8px);
+    box-shadow:0 20px 35px rgba(37,99,235,.25);
+}
+
+.stats-card span{
+    font-size:35px;
+}
+
+.stats-card h2{
+    margin:15px 0;
+    color:#38bdf8;
+}
+
+.stats-card p{
+    color:#cbd5e1;
+}

@@ -1,0 +1,29 @@
+.welcome-card{
+    background:linear-gradient(135deg,#2563eb,#3b82f6,#38bdf8);
+    padding:40px;
+    border-radius:20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    color:white;
+    margin-bottom:35px;
+}
+
+.welcome-card h1{
+    font-size:36px;
+}
+
+.welcome-card p{
+    margin-top:10px;
+    max-width:500px;
+}
+
+.welcome-card button{
+    background:white;
+    color:#2563eb;
+    border:none;
+    padding:15px 30px;
+    border-radius:40px;
+    font-weight:bold;
+    cursor:pointer;
+}

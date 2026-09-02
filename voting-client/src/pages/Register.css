@@ -1,0 +1,85 @@
+.register-page{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    background:linear-gradient(135deg,#0f172a,#1e293b,#2563eb);
+    padding:40px;
+}
+
+.register-card{
+    width:500px;
+    background:rgba(255,255,255,.08);
+    backdrop-filter:blur(18px);
+    border-radius:20px;
+    border:1px solid rgba(255,255,255,.1);
+    padding:40px;
+    color:white;
+    box-shadow:0 20px 40px rgba(0,0,0,.35);
+}
+
+.register-header{
+    text-align:center;
+    margin-bottom:35px;
+}
+
+.register-header h1{
+    color:#38bdf8;
+    margin-bottom:10px;
+}
+
+.register-header p{
+    color:#cbd5e1;
+}
+
+.input-group{
+    display:flex;
+    flex-direction:column;
+    margin-bottom:20px;
+}
+
+.input-group label{
+    margin-bottom:8px;
+    font-weight:500;
+}
+
+.input-group input,
+.input-group select{
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    background:#334155;
+    color:white;
+    outline:none;
+}
+
+.input-group input::placeholder{
+    color:#94a3b8;
+}
+
+.register-btn{
+    width:100%;
+    padding:15px;
+    margin-top:10px;
+    border:none;
+    border-radius:10px;
+    background:#2563eb;
+    color:white;
+    font-size:18px;
+    transition:.3s;
+}
+
+.register-btn:hover{
+    background:#1d4ed8;
+}
+
+.login-text{
+    margin-top:25px;
+    text-align:center;
+}
+
+.login-text a{
+    color:#38bdf8;
+    margin-left:5px;
+    font-weight:600;
+}
