@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production and build output
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# Environment files / secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+*.local
+
+# Key material and certificates
+*.pem
+*.key
+*.cert
+*.crt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# AI and local agent state
+.agents/
+
+# Editor and IDE state
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini

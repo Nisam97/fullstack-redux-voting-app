@@ -7,12 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test test/voting_spec.js test/results_spec.js test/auth_spec.js test/history_spec.js test/stage_c_spec.js test/stage_d_spec.js test/stage_e_spec.js test/timer_redux_spec.js test/countdown_timer_spec.js test/timer_expiry_spec.js test/admin_timer_spec.js test/results_chart_spec.js test/results_visibility_spec.js test/results_transition_spec.js test/results_hardening_spec.js test/admin_workflow_spec.js test/early_completion_frontend_spec.js test/round_results_lifecycle_spec.js",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.12.0",
     "lucide-react": "^1.39.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.7.0",
+    "react-redux": "^9.3.0",
+    "react-router-dom": "^7.18.3",
+    "recharts": "^3.10.1",
+    "redux": "^5.0.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

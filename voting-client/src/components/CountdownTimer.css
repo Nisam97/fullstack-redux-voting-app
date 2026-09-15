@@ -1,0 +1,148 @@
+/**
+ * VoteSphere — Countdown Timer Styles
+ */
+
+.countdown-timer-container {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0.75rem auto 1.25rem;
+  padding: 0.5rem 1rem;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: all 0.3s ease-in-out;
+  user-select: none;
+}
+
+.countdown-timer-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.countdown-timer-icon {
+  color: #38bdf8;
+  transition: color 0.3s ease;
+}
+
+.countdown-timer-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.countdown-timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #f8fafc;
+  min-width: 3.2rem;
+  text-align: center;
+}
+
+/* Progress track */
+.countdown-timer-progress-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin-top: 0.35rem;
+  overflow: hidden;
+}
+
+.countdown-timer-progress-bar {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 2px;
+  transition: width 0.25s linear, background-color 0.3s ease;
+}
+
+/* --- Urgency States --- */
+
+/* Normal (> 10s) */
+.countdown-normal {
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.countdown-normal .countdown-timer-icon {
+  color: #38bdf8;
+}
+
+.countdown-normal .countdown-timer-progress-bar {
+  background: #38bdf8;
+}
+
+/* Warning (6s - 10s) */
+.countdown-warning {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.2);
+}
+
+.countdown-warning .countdown-timer-icon {
+  color: #f59e0b;
+}
+
+.countdown-warning .countdown-timer-digits {
+  color: #fbbf24;
+}
+
+.countdown-warning .countdown-timer-progress-bar {
+  background: #f59e0b;
+}
+
+/* Critical (<= 5s) */
+.countdown-critical {
+  border-color: rgba(239, 68, 68, 0.7);
+  background: rgba(239, 68, 68, 0.16);
+  box-shadow: 0 4px 24px rgba(239, 68, 68, 0.35);
+  animation: countdown-pulse 1s infinite alternate;
+}
+
+.countdown-critical .countdown-timer-icon {
+  color: #ef4444;
+}
+
+.countdown-critical .countdown-timer-digits {
+  color: #fca5a5;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.countdown-critical .countdown-timer-progress-bar {
+  background: #ef4444;
+}
+
+/* Expired (00:00) */
+.countdown-expired {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: none;
+}
+
+.countdown-expired .countdown-timer-icon {
+  color: #94a3b8;
+}
+
+.countdown-expired .countdown-timer-digits {
+  color: #94a3b8;
+}
+
+.countdown-expired .countdown-timer-progress-bar {
+  background: #64748b;
+  width: 0% !important;
+}
+
+@keyframes countdown-pulse {
+  from {
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25);
+  }
+  to {
+    box-shadow: 0 4px 24px rgba(239, 68, 68, 0.6);
+  }
+}

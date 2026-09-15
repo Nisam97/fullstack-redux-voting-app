@@ -120,7 +120,7 @@ function App() {
     }
 
     const alreadyVoted = votedElections.some(
-      (vote) => vote.electionId === selectedElection.id
+      (vote) => vote.sessionId === selectedElection.id
     );
 
     if (alreadyVoted) {
@@ -130,7 +130,7 @@ function App() {
 
     const newVote = {
       id: `VS-${Date.now()}`,
-      electionId: selectedElection.id,
+      sessionId: selectedElection.id,
       election: selectedElection.title,
       candidate: selectedCandidate.name,
       date: new Date().toLocaleDateString(),
@@ -370,7 +370,7 @@ function Dashboard({
               key={election.id}
               election={election}
               voted={votedElections.some(
-                (vote) => vote.electionId === election.id
+                (vote) => vote.sessionId === election.id
               )}
               openElection={openElection}
             />
@@ -402,7 +402,7 @@ function ElectionsPage({
             key={election.id}
             election={election}
             voted={votedElections.some(
-              (vote) => vote.electionId === election.id
+              (vote) => vote.sessionId === election.id
             )}
             openElection={openElection}
           />
