@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  VOTER
+  AUTHORITY
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ElectionStatus {
+  DRAFT
+  PUBLISHED
+  OPEN
+  CLOSED
+}
+model User {
+  id String @id @default(cuid())
+
+  studentId String @unique
+  fullName String
+  department String?
+  email String @unique
+  phone String?
+
+  passwordHash String
+
+  role UserRole @default(VOTER)
+
+  emailVerified Boolean @default(false)
+
+  verificationStatus VerificationStatus @default(PENDING)
+
+  emailVerificationOtp String?
+  emailVerificationOtpExpires DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  votes Vote[]
+  predictions Prediction[]
+
+  auditLogs AuditLog[] @relation("AuthorityAudit")
+
+  sessions Session[]
+}
+
+model CollegeStudent {
+  id        String   @id @default(cuid())
+  studentId String   @unique
+  fullName  String
+  email     String   @unique
+  course    String?
+  year      String?
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Election {
+  id              String         @id @default(cuid())
+  title           String
+  description     String?
+  position        String
+  startTime       DateTime
+  endTime         DateTime
+  status          ElectionStatus @default(DRAFT)
+  resultsReleased Boolean        @default(false)
+
+  createdById String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidates  Candidate[]
+  votes       Vote[]
+  predictions Prediction[]
+}
+
+model Candidate {
+  id         String  @id @default(cuid())
+  electionId String
+  name       String
+  party      String?
+  symbol     String?
+  manifesto  String?
+  active     Boolean @default(true)
+
+  election    Election     @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  votes       Vote[]
+  predictions Prediction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([electionId])
+}
+
+model Vote {
+  id            String   @id @default(cuid())
+  electionId    String
+  voterId       String
+  candidateId   String
+  receiptNumber String   @unique
+  createdAt     DateTime @default(now())
+
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  voter       User     @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([electionId, voterId])
+
+ 
+  @@index([candidateId])
+}
+
+model Prediction {
+  id          String   @id @default(cuid())
+  electionId  String
+  voterId     String
+  candidateId String
+  createdAt   DateTime @default(now())
+
+  election  Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  voter     User      @relation(fields: [voterId], references: [id], onDelete: Restrict)
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@unique([electionId, voterId])
+  @@index([electionId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  authorityId String
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  authority User @relation("AuthorityAudit", fields: [authorityId], references: [id], onDelete: Restrict)
+
+  @@index([authorityId])
+  @@index([createdAt])
+}
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}

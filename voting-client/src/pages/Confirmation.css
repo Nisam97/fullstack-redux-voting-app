@@ -1,0 +1,644 @@
+/* =========================================================
+   VOTESPHERE - CONFIRMATION PAGE
+   Dark Navy + Cyan Professional Theme
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+.confirmation-page {
+  min-height: 100vh;
+  background: #06101d;
+  color: #ffffff;
+  padding: 50px 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =========================================================
+   NORMAL CONFIRMATION CARD
+   ========================================================= */
+
+.confirmation-card {
+  width: 650px;
+  max-width: 100%;
+  background: #0c192a;
+  border: 1px solid #213852;
+  border-radius: 22px;
+  padding: 45px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.confirmation-label {
+  display: inline-block;
+  color: #00d9ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+.confirmation-card h1 {
+  margin: 0 0 12px;
+  font-size: 34px;
+  line-height: 1.2;
+}
+
+.confirmation-description {
+  color: #7f93ab;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 28px;
+}
+
+/* =========================================================
+   SELECTED CANDIDATE
+   ========================================================= */
+
+.selected-candidate {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px;
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 15px;
+  margin-bottom: 22px;
+}
+
+.selected-symbol {
+  width: 65px;
+  height: 65px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #0c192a;
+  border: 1px solid #29405c;
+  border-radius: 14px;
+
+  font-size: 30px;
+}
+
+.selected-candidate span {
+  display: block;
+  color: #7f93ab;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  margin-bottom: 5px;
+}
+
+.selected-candidate h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.selected-candidate p {
+  margin: 5px 0 0;
+  color: #00d9ff;
+  font-size: 13px;
+}
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.confirmation-error {
+  padding: 14px 16px;
+  margin-bottom: 20px;
+
+  background: rgba(255, 70, 70, 0.08);
+  border: 1px solid rgba(255, 90, 90, 0.35);
+  border-radius: 10px;
+
+  color: #ff8585;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   IMPORTANT WARNING
+   ========================================================= */
+
+.confirmation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+
+  padding: 18px;
+  margin-bottom: 25px;
+
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 12px;
+}
+
+.confirmation-warning > span {
+  width: 27px;
+  height: 27px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+  background: #00d9ff;
+  color: #06101d;
+
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.confirmation-warning strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.confirmation-warning p {
+  margin: 0;
+  color: #7f93ab;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   CONFIRM BUTTON
+   ========================================================= */
+
+.confirm-vote-button {
+  width: 100%;
+  padding: 15px;
+
+  background: #00c9e8;
+  border: none;
+  border-radius: 9px;
+
+  color: #06101d;
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.confirm-vote-button:hover:not(:disabled) {
+  background: #00d9ff;
+  transform: translateY(-1px);
+}
+
+.confirm-vote-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   BACK BUTTON
+   ========================================================= */
+
+.back-vote-button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+
+  background: transparent;
+  border: 1px solid #29405c;
+  border-radius: 9px;
+
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.back-vote-button:hover:not(:disabled) {
+  border-color: #00d9ff;
+  color: #00d9ff;
+}
+
+.back-vote-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   EMPTY CONFIRMATION PAGE
+   ========================================================= */
+
+.confirmation-empty {
+  width: 500px;
+  max-width: 100%;
+
+  padding: 45px;
+
+  background: #0c192a;
+  border: 1px solid #213852;
+  border-radius: 20px;
+
+  text-align: center;
+}
+
+.confirmation-empty h2 {
+  margin: 0 0 12px;
+  font-size: 25px;
+}
+
+.confirmation-empty p {
+  color: #7f93ab;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 25px;
+}
+
+.confirmation-empty button {
+  padding: 13px 22px;
+
+  background: #00c9e8;
+  border: none;
+  border-radius: 8px;
+
+  color: #06101d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* =========================================================
+   SUCCESS PAGE
+   ========================================================= */
+
+.success-page {
+  padding: 50px 25px;
+}
+
+.success-card {
+  width: 650px;
+  max-width: 100%;
+
+  background: #0c192a;
+  border: 1px solid #213852;
+  border-radius: 22px;
+
+  padding: 45px;
+  text-align: center;
+
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================================================
+   SUCCESS ICON
+   ========================================================= */
+
+.success-icon {
+  width: 70px;
+  height: 70px;
+
+  margin: 0 auto 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #00c9e8;
+  color: #06101d;
+
+  font-size: 35px;
+  font-weight: 900;
+
+  box-shadow: 0 0 30px rgba(0, 217, 255, 0.18);
+}
+
+.success-label {
+  display: block;
+
+  color: #00d9ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.success-card h1 {
+  margin: 12px 0;
+  font-size: 34px;
+}
+
+.success-description {
+  color: #7f93ab;
+  line-height: 1.6;
+  margin: 0 0 25px;
+  font-size: 14px;
+}
+
+/* =========================================================
+   RECEIPT
+   ========================================================= */
+
+.receipt-card {
+  padding: 24px;
+
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 14px;
+
+  margin-bottom: 20px;
+}
+
+.receipt-card span {
+  display: block;
+
+  color: #7f93ab;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+
+  margin-bottom: 10px;
+}
+
+.receipt-card strong {
+  display: block;
+
+  color: #00d9ff;
+
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+
+  word-break: break-word;
+}
+
+.receipt-card small {
+  display: block;
+
+  margin-top: 9px;
+
+  color: #7f93ab;
+  font-size: 12px;
+}
+
+/* =========================================================
+   FINAL VOTE STATUS
+   ========================================================= */
+
+.final-status {
+  display: flex;
+  align-items: flex-start;
+
+  text-align: left;
+
+  gap: 13px;
+
+  margin-top: 20px;
+  padding: 18px;
+
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 12px;
+}
+
+.final-status > span {
+  color: #00d9ff;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.final-status strong {
+  display: block;
+  font-size: 14px;
+}
+
+.final-status p {
+  margin: 5px 0 0;
+
+  color: #7f93ab;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   NEXT SECTION
+   ========================================================= */
+
+.next-section {
+  margin-top: 30px;
+  padding-top: 30px;
+
+  border-top: 1px solid #213852;
+}
+
+.next-label {
+  color: #00d9ff;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.next-section h2 {
+  margin: 10px 0;
+
+  font-size: 21px;
+}
+
+.next-section p {
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   SUCCESS ACTION BUTTONS
+   ========================================================= */
+
+.success-actions {
+  display: flex;
+  gap: 12px;
+
+  margin-top: 22px;
+}
+
+.success-actions button {
+  flex: 1;
+
+  padding: 14px;
+
+  border-radius: 9px;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.prediction-button {
+  background: #00c9e8;
+  border: none;
+
+  color: #06101d;
+}
+
+.prediction-button:hover {
+  background: #00d9ff;
+  transform: translateY(-1px);
+}
+
+.home-button {
+  background: transparent;
+  border: 1px solid #29405c;
+
+  color: #ffffff;
+}
+
+.home-button:hover {
+  border-color: #00d9ff;
+  color: #00d9ff;
+}
+
+/* =========================================================
+   LOGOUT SUGGESTION
+   ========================================================= */
+
+.logout-suggestion {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  margin-top: 25px;
+  padding: 15px;
+
+  background: #071321;
+  border: 1px solid #213852;
+  border-radius: 12px;
+
+  text-align: left;
+}
+
+.logout-suggestion > span {
+  font-size: 20px;
+}
+
+.logout-suggestion div {
+  flex: 1;
+}
+
+.logout-suggestion strong {
+  display: block;
+
+  font-size: 13px;
+}
+
+.logout-suggestion p {
+  margin: 3px 0 0;
+
+  color: #7f93ab;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.logout-suggestion button {
+  padding: 9px 15px;
+
+  background: transparent;
+  border: 1px solid #29405c;
+  border-radius: 7px;
+
+  color: #ffffff;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.logout-suggestion button:hover {
+  border-color: #00d9ff;
+  color: #00d9ff;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .confirmation-page {
+    padding: 25px 15px;
+  }
+
+  .confirmation-card,
+  .success-card {
+    padding: 28px 20px;
+  }
+
+  .confirmation-card h1,
+  .success-card h1 {
+    font-size: 28px;
+  }
+
+  .selected-candidate {
+    padding: 17px;
+  }
+
+  .selected-symbol {
+    width: 55px;
+    height: 55px;
+    font-size: 25px;
+  }
+
+  .selected-candidate h2 {
+    font-size: 19px;
+  }
+
+  .success-actions {
+    flex-direction: column;
+  }
+
+  .logout-suggestion {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .logout-suggestion button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .confirmation-card,
+  .success-card {
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  .selected-candidate {
+    gap: 12px;
+  }
+
+  .selected-symbol {
+    width: 48px;
+    height: 48px;
+    font-size: 21px;
+  }
+
+  .confirmation-warning {
+    padding: 15px;
+  }
+
+  .receipt-card strong {
+    font-size: 21px;
+  }
+}

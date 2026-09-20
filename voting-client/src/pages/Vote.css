@@ -1,0 +1,667 @@
+/* =========================================================
+   VOTESPHERE - OFFICIAL VOTING PAGE
+   DARK + CYAN PROFESSIONAL THEME
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+.vote-page {
+  min-height: 100vh;
+  background: #06101d;
+  color: #ffffff;
+  padding: 0 60px 70px;
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.vote-header {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 55px 0 35px;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+
+  border-bottom: 1px solid #213852;
+}
+
+.vote-header-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.vote-label {
+  color: #00d9ff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+
+.vote-header h1 {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.vote-header p {
+  margin: 12px 0 0;
+  color: #7f93ab;
+  font-size: 16px;
+}
+
+.secure-badge {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  padding: 11px 17px;
+
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 30px;
+
+  color: #dce8f5;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.secure-badge span {
+  font-size: 16px;
+}
+
+
+/* =========================================================
+   PROGRESS
+   ========================================================= */
+
+.vote-progress {
+  max-width: 1200px;
+  margin: 35px auto;
+
+  display: flex;
+  align-items: center;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 155px;
+}
+
+.progress-step > span {
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #071321;
+  border: 1px solid #29405c;
+
+  color: #7f93ab;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.progress-step.active > span {
+  background: #00c9e8;
+  border-color: #00c9e8;
+  color: #06101d;
+}
+
+.progress-step strong {
+  display: block;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.progress-step small {
+  display: block;
+  margin-top: 4px;
+
+  color: #7f93ab;
+  font-size: 12px;
+}
+
+.progress-line {
+  height: 1px;
+  flex: 1;
+
+  background: #213852;
+  margin: 0 15px;
+}
+
+
+/* =========================================================
+   WARNING
+   ========================================================= */
+
+.vote-warning {
+  max-width: 1200px;
+  margin: 0 auto 40px;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+
+  padding: 22px 24px;
+
+  background: #0c192a;
+  border: 1px solid #29405c;
+  border-left: 3px solid #00d9ff;
+  border-radius: 12px;
+}
+
+.warning-icon {
+  width: 38px;
+  height: 38px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #071321;
+  border: 1px solid #00d9ff;
+
+  color: #00d9ff;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.vote-warning h3 {
+  margin: 0 0 7px;
+
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.vote-warning p {
+  margin: 0;
+
+  color: #7f93ab;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+
+/* =========================================================
+   BALLOT SECTION
+   ========================================================= */
+
+.vote-section {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.vote-section-heading {
+  margin-bottom: 25px;
+}
+
+.vote-section-heading > span {
+  color: #00d9ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.vote-section-heading h2 {
+  margin: 8px 0 8px;
+
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.vote-section-heading p {
+  margin: 0;
+
+  color: #7f93ab;
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   CANDIDATE LIST
+   ========================================================= */
+
+.vote-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vote-candidate {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  position: relative;
+
+  padding: 22px 25px;
+
+  background: #0c192a;
+  border: 1px solid #29405c;
+  border-radius: 14px;
+
+  color: #ffffff;
+
+  text-align: left;
+  cursor: pointer;
+
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.vote-candidate:hover {
+  border-color: #00d9ff;
+  background: #0d1d30;
+  transform: translateY(-2px);
+}
+
+.vote-candidate.selected {
+  border-color: #00d9ff;
+  background: #0c1d2d;
+  box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.12);
+}
+
+
+/* =========================================================
+   RADIO
+   ========================================================= */
+
+.candidate-radio {
+  width: 24px;
+  height: 24px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-right: 20px;
+
+  border: 2px solid #29405c;
+  border-radius: 50%;
+
+  color: #06101d;
+  font-size: 13px;
+  font-weight: 900;
+
+  transition: 0.2s ease;
+}
+
+.candidate-radio.checked {
+  background: #00d9ff;
+  border-color: #00d9ff;
+}
+
+
+/* =========================================================
+   CANDIDATE SYMBOL
+   ========================================================= */
+
+.vote-symbol {
+  width: 58px;
+  height: 58px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-right: 20px;
+
+  background: #071321;
+  border: 1px solid #29405c;
+  border-radius: 12px;
+
+  font-size: 27px;
+
+  transition: 0.2s ease;
+}
+
+.vote-candidate.selected .vote-symbol {
+  border-color: #00d9ff;
+}
+
+
+/* =========================================================
+   CANDIDATE INFORMATION
+   ========================================================= */
+
+.vote-candidate-info {
+  flex: 1;
+}
+
+.candidate-position {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #00d9ff;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.vote-candidate-info h3 {
+  margin: 0;
+
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.vote-candidate-info p {
+  margin: 6px 0 0;
+
+  color: #7f93ab;
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   SELECTED LABEL
+   ========================================================= */
+
+.selected-label {
+  padding: 8px 13px;
+
+  background: rgba(0, 217, 255, 0.08);
+  border: 1px solid rgba(0, 217, 255, 0.4);
+  border-radius: 20px;
+
+  color: #00d9ff;
+
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   BOTTOM ACTION
+   ========================================================= */
+
+.vote-action {
+  max-width: 1200px;
+  margin: 35px auto 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+
+  padding: 24px 26px;
+
+  background: #0c192a;
+  border: 1px solid #213852;
+  border-radius: 14px;
+}
+
+.selection-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selection-status span {
+  color: #7f93ab;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.selection-status strong {
+  color: #ffffff;
+
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.continue-vote-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+
+  min-width: 175px;
+
+  padding: 14px 22px;
+
+  background: #00c9e8;
+  border: none;
+  border-radius: 8px;
+
+  color: #06101d;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.continue-vote-button span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.continue-vote-button:hover {
+  background: #00d9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 217, 255, 0.15);
+}
+
+
+/* =========================================================
+   SECURITY MESSAGE
+   ========================================================= */
+
+.vote-security {
+  max-width: 1200px;
+  margin: 25px auto 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  color: #7f93ab;
+
+  font-size: 12px;
+}
+
+.vote-security span {
+  font-size: 15px;
+}
+
+.vote-security p {
+  margin: 0;
+}
+
+
+/* =========================================================
+   FOCUS ACCESSIBILITY
+   ========================================================= */
+
+.vote-candidate:focus-visible,
+.continue-vote-button:focus-visible {
+  outline: 2px solid #00d9ff;
+  outline-offset: 3px;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .vote-page {
+    padding: 0 30px 60px;
+  }
+
+  .vote-header {
+    padding-top: 40px;
+  }
+
+  .vote-header h1 {
+    font-size: 34px;
+  }
+
+  .progress-step {
+    min-width: auto;
+  }
+
+  .progress-step div {
+    display: none;
+  }
+
+  .progress-step > span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .vote-action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .selection-status {
+    text-align: center;
+  }
+
+  .continue-vote-button {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .vote-page {
+    padding: 0 18px 45px;
+  }
+
+  .vote-header {
+    padding: 30px 0 25px;
+
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .vote-header h1 {
+    font-size: 30px;
+  }
+
+  .vote-header p {
+    font-size: 14px;
+  }
+
+  .secure-badge {
+    font-size: 12px;
+  }
+
+  .vote-progress {
+    margin: 25px auto;
+  }
+
+  .progress-line {
+    margin: 0 8px;
+  }
+
+  .vote-warning {
+    padding: 18px;
+    gap: 13px;
+  }
+
+  .warning-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .vote-warning h3 {
+    font-size: 14px;
+  }
+
+  .vote-warning p {
+    font-size: 12px;
+  }
+
+  .vote-section-heading h2 {
+    font-size: 23px;
+  }
+
+  .vote-candidate {
+    padding: 18px 15px;
+  }
+
+  .candidate-radio {
+    margin-right: 12px;
+  }
+
+  .vote-symbol {
+    width: 48px;
+    height: 48px;
+
+    margin-right: 13px;
+
+    font-size: 22px;
+  }
+
+  .vote-candidate-info h3 {
+    font-size: 16px;
+  }
+
+  .vote-candidate-info p {
+    font-size: 12px;
+  }
+
+  .selected-label {
+    display: none;
+  }
+
+  .vote-action {
+    padding: 20px;
+  }
+
+  .vote-security {
+    text-align: center;
+    line-height: 1.5;
+  }
+}

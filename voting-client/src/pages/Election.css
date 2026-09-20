@@ -1,0 +1,689 @@
+/* =========================================================
+   VOTESPHERE ELECTION PAGE
+   LOGIN + HOME PAGE COLOR THEME
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+.election-page {
+  min-height: 100vh;
+  background: #06101d;
+  color: #ffffff;
+  padding: 0 60px 70px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.election-header {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 70px 0 45px;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+
+  border-bottom: 1px solid #213852;
+}
+
+.election-label {
+  display: inline-block;
+
+  margin-bottom: 14px;
+
+  color: #00d9ff;
+
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+}
+
+.election-header h1 {
+  margin: 0;
+
+  color: #ffffff;
+
+  font-size: clamp(36px, 5vw, 58px);
+  line-height: 1.1;
+  letter-spacing: -2px;
+}
+
+.election-header p {
+  margin: 16px 0 0;
+
+  color: #7f93ab;
+
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+
+/* =========================================================
+   ELECTION STATUS
+   ========================================================= */
+
+.election-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  padding: 10px 15px;
+
+  background: rgba(0, 201, 232, 0.08);
+
+  border: 1px solid rgba(0, 217, 255, 0.2);
+
+  border-radius: 50px;
+
+  color: #00d9ff;
+
+  font-size: 12px;
+  font-weight: 800;
+
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+
+  background: #00d9ff;
+
+  border-radius: 50%;
+
+  box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.1);
+}
+
+
+/* =========================================================
+   ELECTION INFORMATION
+   ========================================================= */
+
+.election-info-grid {
+  max-width: 1200px;
+
+  margin: 35px auto 0;
+
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 16px;
+}
+
+.info-box {
+  padding: 23px;
+
+  background: #0c192a;
+
+  border: 1px solid #213852;
+
+  border-radius: 13px;
+
+  transition: 0.25s ease;
+}
+
+.info-box:hover {
+  border-color: #00d9ff;
+
+  transform: translateY(-3px);
+
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.info-box span {
+  display: block;
+
+  margin-bottom: 10px;
+
+  color: #60738a;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.info-box strong {
+  color: #ffffff;
+
+  font-size: 20px;
+}
+
+.info-box:first-child strong {
+  color: #00d9ff;
+}
+
+
+/* =========================================================
+   VOTING NOTICE
+   ========================================================= */
+
+.voting-notice {
+  max-width: 1200px;
+
+  margin: 25px auto 0;
+
+  padding: 20px 22px;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+
+  background: #0c192a;
+
+  border: 1px solid #29405c;
+
+  border-radius: 13px;
+}
+
+.notice-icon {
+  width: 44px;
+  height: 44px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+
+  border-radius: 10px;
+
+  font-size: 18px;
+}
+
+.voting-notice h3 {
+  margin: 2px 0 7px;
+
+  color: #ffffff;
+
+  font-size: 14px;
+}
+
+.voting-notice p {
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 12px;
+
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   CANDIDATE SECTION
+   ========================================================= */
+
+.candidate-section {
+  max-width: 1200px;
+
+  margin: 85px auto 0;
+}
+
+.section-heading {
+  display: flex;
+
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 30px;
+
+  margin-bottom: 38px;
+}
+
+.section-heading span {
+  display: block;
+
+  margin-bottom: 10px;
+
+  color: #00d9ff;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1.6px;
+}
+
+.section-heading h2 {
+  margin: 0;
+
+  color: #ffffff;
+
+  font-size: 38px;
+
+  letter-spacing: -1px;
+}
+
+.section-heading p {
+  max-width: 330px;
+
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 13px;
+
+  line-height: 1.7;
+
+  text-align: right;
+}
+
+
+/* =========================================================
+   CANDIDATE GRID
+   ========================================================= */
+
+.candidate-grid {
+  display: grid;
+
+  grid-template-columns: repeat(3, 1fr);
+
+  gap: 20px;
+}
+
+
+/* =========================================================
+   CANDIDATE CARD
+   ========================================================= */
+
+.candidate-card {
+  position: relative;
+
+  padding: 27px;
+
+  background: #0c192a;
+
+  border: 1px solid #213852;
+
+  border-radius: 16px;
+
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.candidate-card:hover {
+  transform: translateY(-6px);
+
+  border-color: #00d9ff;
+
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+}
+
+
+/* =========================================================
+   CANDIDATE TOP
+   ========================================================= */
+
+.candidate-top {
+  display: flex;
+
+  align-items: center;
+
+  gap: 17px;
+
+  padding-bottom: 22px;
+
+  border-bottom: 1px solid #213852;
+}
+
+.candidate-symbol {
+  width: 62px;
+  height: 62px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+
+  border-radius: 14px;
+
+  font-size: 27px;
+}
+
+.candidate-position {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #00d9ff;
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  letter-spacing: 1px;
+
+  text-transform: uppercase;
+}
+
+.candidate-top h3 {
+  margin: 0;
+
+  color: #ffffff;
+
+  font-size: 20px;
+
+  line-height: 1.2;
+}
+
+.candidate-party {
+  margin: 6px 0 0;
+
+  color: #7f93ab;
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+
+/* =========================================================
+   MANIFESTO
+   ========================================================= */
+
+.manifesto {
+  padding: 22px 0;
+}
+
+.manifesto > span {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #60738a;
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  letter-spacing: 1.2px;
+}
+
+.manifesto p {
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 13px;
+
+  line-height: 1.75;
+}
+
+
+/* =========================================================
+   CANDIDATE FOOTER
+   ========================================================= */
+
+.candidate-footer {
+  padding-top: 17px;
+
+  border-top: 1px solid #213852;
+}
+
+.candidate-footer span {
+  color: #00d9ff;
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.4px;
+}
+
+
+/* =========================================================
+   START VOTING SECTION
+   ========================================================= */
+
+.start-voting-section {
+  max-width: 1200px;
+
+  margin: 75px auto 0;
+
+  padding: 45px 48px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 35px;
+
+  background:
+    radial-gradient(
+      circle at 85% 50%,
+      rgba(0, 217, 255, 0.08),
+      transparent 35%
+    ),
+    #0c192a;
+
+  border: 1px solid #213852;
+
+  border-radius: 18px;
+
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);
+}
+
+.start-voting-section > div > span {
+  display: block;
+
+  margin-bottom: 10px;
+
+  color: #00d9ff;
+
+  font-size: 10px;
+
+  font-weight: 800;
+
+  letter-spacing: 1.5px;
+}
+
+.start-voting-section h2 {
+  margin: 0 0 12px;
+
+  color: #ffffff;
+
+  font-size: 32px;
+
+  letter-spacing: -0.7px;
+}
+
+.start-voting-section p {
+  max-width: 600px;
+
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 13px;
+
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   VOTE BUTTON
+   ========================================================= */
+
+.start-voting-button {
+  min-width: 175px;
+
+  padding: 15px 22px;
+
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 12px;
+
+  background: #00c9e8;
+
+  border: none;
+
+  border-radius: 8px;
+
+  color: #06101d;
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition: 0.25s ease;
+}
+
+.start-voting-button:hover {
+  background: #00d9ff;
+
+  transform: translateY(-3px);
+
+  box-shadow: 0 10px 25px rgba(0, 217, 255, 0.15);
+}
+
+.start-voting-button span {
+  font-size: 18px;
+
+  line-height: 1;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1000px) {
+
+  .election-page {
+    padding: 0 35px 60px;
+  }
+
+  .election-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .candidate-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+}
+
+
+@media (max-width: 700px) {
+
+  .election-page {
+    padding: 0 20px 50px;
+  }
+
+  .election-header {
+    padding: 50px 0 35px;
+
+    flex-direction: column;
+
+    align-items: flex-start;
+  }
+
+  .election-header h1 {
+    font-size: 40px;
+  }
+
+  .election-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .voting-notice {
+    padding: 18px;
+  }
+
+  .candidate-section {
+    margin-top: 60px;
+  }
+
+  .section-heading {
+    flex-direction: column;
+
+    align-items: flex-start;
+
+    margin-bottom: 30px;
+  }
+
+  .section-heading h2 {
+    font-size: 32px;
+  }
+
+  .section-heading p {
+    max-width: 100%;
+
+    text-align: left;
+  }
+
+  .candidate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .start-voting-section {
+    padding: 32px 25px;
+
+    flex-direction: column;
+
+    align-items: flex-start;
+  }
+
+  .start-voting-section h2 {
+    font-size: 28px;
+  }
+
+  .start-voting-button {
+    width: 100%;
+  }
+
+}
+
+
+@media (max-width: 420px) {
+
+  .election-header h1 {
+    font-size: 34px;
+  }
+
+  .candidate-card {
+    padding: 22px;
+  }
+
+  .candidate-top {
+    gap: 12px;
+  }
+
+  .candidate-symbol {
+    width: 55px;
+    height: 55px;
+
+    font-size: 24px;
+  }
+
+  .candidate-top h3 {
+    font-size: 18px;
+  }
+
+}

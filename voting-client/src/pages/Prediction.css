@@ -1,0 +1,778 @@
+/* =========================================================
+   VOTESPHERE - COMMUNITY PREDICTION PAGE
+   DARK + CYAN PROFESSIONAL THEME
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+.prediction-page {
+  min-height: 100vh;
+
+  background: #06101d;
+  color: #ffffff;
+
+  padding: 60px 30px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-family: Arial, Helvetica, sans-serif;
+
+  overflow-x: hidden;
+}
+
+
+/* =========================================================
+   MAIN PREDICTION CARD
+   ========================================================= */
+
+.prediction-card,
+.prediction-result-card {
+  width: 100%;
+  max-width: 720px;
+
+  padding: 45px;
+
+  background: #0c192a;
+
+  border: 1px solid #213852;
+  border-radius: 20px;
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+
+/* =========================================================
+   PREDICTION ICON
+   ========================================================= */
+
+.prediction-icon {
+  width: 70px;
+  height: 70px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-bottom: 22px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+  border-radius: 14px;
+
+  font-size: 32px;
+
+  box-shadow:
+    0 0 25px rgba(0, 217, 255, 0.05);
+}
+
+
+/* =========================================================
+   LABEL
+   ========================================================= */
+
+.prediction-label {
+  display: block;
+
+  margin-bottom: 12px;
+
+  color: #00d9ff;
+
+  font-size: 11px;
+  font-weight: 800;
+
+  letter-spacing: 2px;
+}
+
+
+/* =========================================================
+   HEADINGS
+   ========================================================= */
+
+.prediction-card h1,
+.prediction-result-card h1 {
+  margin: 0 0 14px;
+
+  font-size: 34px;
+  font-weight: 800;
+
+  line-height: 1.15;
+}
+
+.prediction-card > p {
+  margin: 0 0 28px;
+
+  color: #7f93ab;
+
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   INFORMATION BOX
+   ========================================================= */
+
+.prediction-info {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 14px;
+
+  padding: 19px 20px;
+
+  margin-bottom: 25px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+  border-left: 3px solid #00d9ff;
+
+  border-radius: 10px;
+}
+
+.prediction-info > span {
+  font-size: 20px;
+}
+
+.prediction-info strong {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: 14px;
+}
+
+.prediction-info p {
+  margin: 0;
+
+  color: #7f93ab;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   PREDICTION OPTIONS
+   ========================================================= */
+
+.prediction-options {
+  display: flex;
+  flex-direction: column;
+
+  gap: 12px;
+
+  margin-bottom: 25px;
+}
+
+.prediction-option {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  padding: 17px 18px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+  border-radius: 12px;
+
+  color: #ffffff;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.prediction-option:hover {
+  background: #0d1d30;
+
+  border-color: #00d9ff;
+
+  transform: translateY(-2px);
+}
+
+.prediction-option.selected {
+  background: #0c1d2d;
+
+  border-color: #00d9ff;
+
+  box-shadow:
+    0 0 0 1px rgba(0, 217, 255, 0.1);
+}
+
+
+/* =========================================================
+   OPTION SYMBOL
+   ========================================================= */
+
+.prediction-option-symbol {
+  width: 48px;
+  height: 48px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-right: 15px;
+
+  background: #0c192a;
+
+  border: 1px solid #29405c;
+  border-radius: 10px;
+
+  font-size: 23px;
+}
+
+.prediction-option.selected
+.prediction-option-symbol {
+  border-color: #00d9ff;
+}
+
+
+/* =========================================================
+   OPTION INFORMATION
+   ========================================================= */
+
+.prediction-option-info {
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 5px;
+}
+
+.prediction-option-info strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.prediction-option-info small {
+  color: #7f93ab;
+
+  font-size: 12px;
+}
+
+
+/* =========================================================
+   RADIO
+   ========================================================= */
+
+.prediction-radio {
+  width: 24px;
+  height: 24px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 2px solid #29405c;
+  border-radius: 50%;
+
+  color: #06101d;
+
+  font-size: 13px;
+  font-weight: 900;
+
+  transition: 0.2s ease;
+}
+
+.prediction-option.selected .prediction-radio {
+  background: #00d9ff;
+
+  border-color: #00d9ff;
+}
+
+
+/* =========================================================
+   SUBMIT BUTTON
+   ========================================================= */
+
+.submit-prediction-button {
+  width: 100%;
+
+  padding: 15px 20px;
+
+  background: #00c9e8;
+
+  border: 1px solid #00c9e8;
+  border-radius: 8px;
+
+  color: #06101d;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.submit-prediction-button:hover {
+  background: #00d9ff;
+
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 8px 25px rgba(0, 217, 255, 0.15);
+}
+
+
+/* =========================================================
+   DISCLAIMER
+   ========================================================= */
+
+.prediction-disclaimer {
+  margin: 18px 0 0;
+
+  color: #60758c;
+
+  font-size: 11px;
+
+  text-align: center;
+
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   SUCCESS / RESULT CARD
+   ========================================================= */
+
+.prediction-result-card {
+  max-width: 760px;
+
+  text-align: center;
+}
+
+
+/* =========================================================
+   SUCCESS ICON
+   ========================================================= */
+
+.poll-success-icon {
+  width: 75px;
+  height: 75px;
+
+  margin: 0 auto 22px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0, 217, 255, 0.08);
+
+  border: 2px solid #00d9ff;
+
+  border-radius: 50%;
+
+  color: #00d9ff;
+
+  font-size: 34px;
+  font-weight: 900;
+
+  box-shadow:
+    0 0 30px rgba(0, 217, 255, 0.1);
+}
+
+
+/* =========================================================
+   RESULT DESCRIPTION
+   ========================================================= */
+
+.prediction-description {
+  max-width: 540px;
+
+  margin: 0 auto 22px;
+
+  color: #7f93ab;
+
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   POLL NOTICE
+   ========================================================= */
+
+.poll-notice {
+  padding: 17px 20px;
+
+  margin-bottom: 28px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+  border-left: 3px solid #00d9ff;
+
+  border-radius: 10px;
+
+  color: #7f93ab;
+
+  font-size: 12px;
+
+  line-height: 1.7;
+
+  text-align: left;
+}
+
+.poll-notice strong {
+  color: #ffffff;
+}
+
+
+/* =========================================================
+   PREDICTION RESULTS
+   ========================================================= */
+
+.prediction-results {
+  display: flex;
+  flex-direction: column;
+
+  gap: 18px;
+
+  margin-bottom: 25px;
+}
+
+.prediction-result {
+  padding: 18px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+
+  border-radius: 12px;
+
+  text-align: left;
+
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.prediction-result:hover {
+  background: #0d1d30;
+
+  border-color: #385572;
+}
+
+
+/* =========================================================
+   RESULT HEADER
+   ========================================================= */
+
+.prediction-result-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 15px;
+
+  margin-bottom: 12px;
+}
+
+.prediction-person {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  min-width: 0;
+}
+
+.prediction-rank {
+  min-width: 28px;
+
+  color: #7f93ab;
+
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.prediction-symbol {
+  width: 40px;
+  height: 40px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #0c192a;
+
+  border: 1px solid #29405c;
+
+  border-radius: 8px;
+
+  font-size: 19px;
+}
+
+.prediction-person > div:last-child {
+  min-width: 0;
+}
+
+.prediction-person strong {
+  display: block;
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.prediction-person small {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #7f93ab;
+
+  font-size: 11px;
+}
+
+.prediction-result-header > strong {
+  color: #00d9ff;
+
+  font-size: 18px;
+  font-weight: 800;
+}
+
+
+/* =========================================================
+   RESULT PROGRESS BAR
+   ========================================================= */
+
+.prediction-bar {
+  width: 100%;
+  height: 8px;
+
+  overflow: hidden;
+
+  background: #0c192a;
+
+  border: 1px solid #213852;
+
+  border-radius: 10px;
+}
+
+.prediction-bar > div {
+  height: 100%;
+
+  background: #00c9e8;
+
+  border-radius: 10px;
+
+  transition: width 0.5s ease;
+}
+
+
+/* =========================================================
+   POLL TOTAL
+   ========================================================= */
+
+.poll-total {
+  padding: 20px;
+
+  margin-top: 5px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+
+  border-radius: 12px;
+}
+
+.poll-total strong {
+  display: block;
+
+  color: #00d9ff;
+
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.poll-total span {
+  display: block;
+
+  margin-top: 5px;
+
+  color: #7f93ab;
+
+  font-size: 11px;
+}
+
+
+/* =========================================================
+   FOOTER NOTE
+   ========================================================= */
+
+.prediction-footer-note {
+  margin: 20px 0;
+
+  color: #60758c;
+
+  font-size: 11px;
+
+  line-height: 1.6;
+}
+
+
+/* =========================================================
+   HOME BUTTON
+   ========================================================= */
+
+.prediction-home-button {
+  width: 100%;
+
+  padding: 14px 20px;
+
+  background: #071321;
+
+  border: 1px solid #29405c;
+
+  border-radius: 8px;
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.prediction-home-button:hover {
+  background: #0c192a;
+
+  border-color: #00d9ff;
+
+  color: #00d9ff;
+}
+
+
+/* =========================================================
+   ACCESSIBILITY
+   ========================================================= */
+
+button:focus-visible {
+  outline: 2px solid #00d9ff;
+  outline-offset: 3px;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+  .prediction-page {
+    padding: 35px 20px;
+  }
+
+  .prediction-card,
+  .prediction-result-card {
+    padding: 32px 25px;
+  }
+
+  .prediction-card h1,
+  .prediction-result-card h1 {
+    font-size: 29px;
+  }
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 480px) {
+
+  .prediction-page {
+    padding: 25px 15px;
+  }
+
+  .prediction-card,
+  .prediction-result-card {
+    padding: 28px 18px;
+
+    border-radius: 15px;
+  }
+
+  .prediction-icon {
+    width: 58px;
+    height: 58px;
+
+    font-size: 26px;
+  }
+
+  .prediction-card h1,
+  .prediction-result-card h1 {
+    font-size: 25px;
+  }
+
+  .prediction-card > p {
+    font-size: 13px;
+  }
+
+  .prediction-option {
+    padding: 14px;
+  }
+
+  .prediction-option-symbol {
+    width: 43px;
+    height: 43px;
+
+    margin-right: 12px;
+
+    font-size: 20px;
+  }
+
+  .prediction-option-info strong {
+    font-size: 14px;
+  }
+
+  .prediction-result {
+    padding: 15px;
+  }
+
+  .prediction-result-header > strong {
+    font-size: 16px;
+  }
+
+  .poll-success-icon {
+    width: 65px;
+    height: 65px;
+
+    font-size: 29px;
+  }
+}

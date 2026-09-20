@@ -1,0 +1,615 @@
+/* =========================================================
+   VOTESPHERE — OFFICIAL RESULTS
+   Professional Election Results Interface
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   PAGE
+   ========================================================= */
+
+.results-page {
+  min-height: 100vh;
+  width: 100%;
+
+  padding: 42px 6% 65px;
+
+  background:
+    radial-gradient(
+      circle at 85% 5%,
+      rgba(108, 77, 246, 0.08),
+      transparent 28%
+    ),
+    #f7f8fc;
+
+  color: #191a2b;
+
+  font-family:
+    "Inter",
+    "Poppins",
+    Arial,
+    sans-serif;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.results-header {
+  max-width: 1180px;
+
+  margin: 0 auto 28px;
+
+  padding: 30px 32px;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 25px;
+
+  background: #ffffff;
+
+  border: 1px solid #e7e8f0;
+
+  border-radius: 22px;
+
+  box-shadow:
+    0 10px 35px rgba(25, 26, 43, 0.05);
+}
+
+.results-header > div:first-child > span {
+  display: inline-block;
+
+  margin-bottom: 9px;
+
+  color: #6848ed;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1.3px;
+}
+
+.results-header h1 {
+  margin: 0;
+
+  color: #171827;
+
+  font-size: 31px;
+
+  line-height: 1.2;
+
+  font-weight: 800;
+
+  letter-spacing: -0.7px;
+}
+
+.results-header p {
+  margin: 9px 0 0;
+
+  color: #777b8d;
+
+  font-size: 14px;
+}
+
+/* =========================================================
+   STATUS
+   ========================================================= */
+
+.results-status {
+  flex-shrink: 0;
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+  padding: 10px 15px;
+
+  background: #fff8e8;
+
+  border: 1px solid #f1dfb4;
+
+  border-radius: 999px;
+
+  color: #89631c;
+
+  font-size: 12px;
+
+  font-weight: 750;
+}
+
+.results-status span {
+  width: 8px;
+  height: 8px;
+
+  border-radius: 50%;
+
+  background: #d89b25;
+}
+
+/* =========================================================
+   LOCKED RESULTS
+   ========================================================= */
+
+.results-locked {
+  max-width: 850px;
+
+  margin: 35px auto 0;
+
+  padding: 42px 45px;
+
+  text-align: center;
+
+  background: #ffffff;
+
+  border: 1px solid #e5e6ee;
+
+  border-radius: 24px;
+
+  box-shadow:
+    0 15px 40px rgba(25, 26, 43, 0.06);
+}
+
+/* =========================================================
+   LOCK ICON
+   ========================================================= */
+
+.lock-icon {
+  width: 68px;
+  height: 68px;
+
+  margin: 0 auto 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background:
+    linear-gradient(
+      145deg,
+      #f1edff,
+      #e8e3ff
+    );
+
+  border: 1px solid #ddd6ff;
+
+  border-radius: 50%;
+
+  font-size: 27px;
+
+  box-shadow:
+    0 8px 22px rgba(104, 72, 237, 0.09);
+}
+
+/* =========================================================
+   LOCKED LABEL
+   ========================================================= */
+
+.locked-label {
+  display: inline-block;
+
+  margin-bottom: 9px;
+
+  color: #6848ed;
+
+  font-size: 10px;
+
+  font-weight: 800;
+
+  letter-spacing: 1.3px;
+}
+
+/* =========================================================
+   LOCKED TITLE
+   ========================================================= */
+
+.results-locked h2 {
+  margin: 0;
+
+  color: #202131;
+
+  font-size: 25px;
+
+  line-height: 1.3;
+
+  font-weight: 800;
+
+  letter-spacing: -0.4px;
+}
+
+.results-locked > p {
+  max-width: 650px;
+
+  margin: 12px auto 0;
+
+  color: #777b8d;
+
+  font-size: 14px;
+
+  line-height: 1.75;
+}
+
+/* =========================================================
+   LOCKED INFORMATION
+   ========================================================= */
+
+.locked-info-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 13px;
+
+  margin-top: 30px;
+
+  text-align: left;
+}
+
+.locked-info-grid > div {
+  padding: 17px;
+
+  background: #f8f8fb;
+
+  border: 1px solid #e9e9f0;
+
+  border-radius: 14px;
+}
+
+.locked-info-grid strong {
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: #55596b;
+
+  font-size: 11px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.5px;
+}
+
+.locked-info-grid span {
+  display: block;
+
+  color: #6848ed;
+
+  font-size: 13px;
+
+  font-weight: 700;
+
+  line-height: 1.4;
+}
+
+/* =========================================================
+   BACK BUTTON
+   ========================================================= */
+
+.results-back-button {
+  min-width: 190px;
+
+  margin-top: 28px;
+
+  padding: 14px 20px;
+
+  border: none;
+
+  border-radius: 12px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #6848ed,
+      #7555ed
+    );
+
+  color: #ffffff;
+
+  font-size: 13px;
+
+  font-weight: 750;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 9px 22px rgba(104, 72, 237, 0.18);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.results-back-button:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 13px 27px rgba(104, 72, 237, 0.24);
+}
+
+.results-back-button:active {
+  transform: translateY(0);
+}
+
+/* =========================================================
+   OPEN RESULTS
+   ========================================================= */
+
+.results-open {
+  max-width: 1050px;
+
+  margin: 0 auto;
+}
+
+/* =========================================================
+   RESULTS SUMMARY
+   ========================================================= */
+
+.results-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 16px;
+
+  margin-bottom: 25px;
+}
+
+.results-summary > div {
+  padding: 22px;
+
+  background: #ffffff;
+
+  border: 1px solid #e7e8ef;
+
+  border-radius: 17px;
+
+  box-shadow:
+    0 7px 22px rgba(25, 26, 43, 0.04);
+}
+
+.results-summary span {
+  display: block;
+
+  margin-bottom: 8px;
+
+  color: #888c9d;
+
+  font-size: 10px;
+
+  font-weight: 750;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.7px;
+}
+
+.results-summary strong {
+  color: #292a3b;
+
+  font-size: 22px;
+
+  font-weight: 800;
+}
+
+/* =========================================================
+   OFFICIAL RESULTS
+   ========================================================= */
+
+.official-results {
+  padding: 27px;
+
+  background: #ffffff;
+
+  border: 1px solid #e6e7ef;
+
+  border-radius: 20px;
+
+  box-shadow:
+    0 10px 28px rgba(25, 26, 43, 0.05);
+}
+
+.official-results h2 {
+  margin: 0 0 20px;
+
+  color: #202131;
+
+  font-size: 21px;
+
+  font-weight: 800;
+}
+
+/* =========================================================
+   RESULT ROW
+   ========================================================= */
+
+.result-row {
+  display: flex;
+
+  align-items: center;
+
+  gap: 15px;
+
+  padding: 17px 14px;
+
+  border-top: 1px solid #eeeeF3;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.result-row:hover {
+  background: #faf9ff;
+
+  transform: translateX(3px);
+}
+
+/* Rank */
+
+.result-row > span {
+  width: 35px;
+  height: 35px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #f1f0f7;
+
+  border-radius: 10px;
+
+  color: #606477;
+
+  font-size: 12px;
+
+  font-weight: 800;
+}
+
+/* Candidate */
+
+.result-row > strong {
+  flex: 1;
+
+  color: #292a3b;
+
+  font-size: 14px;
+
+  font-weight: 750;
+}
+
+/* Votes */
+
+.result-row > b {
+  min-width: 95px;
+
+  color: #6848ed;
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  text-align: right;
+}
+
+/* =========================================================
+   FIRST POSITION
+   ========================================================= */
+
+.result-row:first-of-type > span {
+  background: #f0edff;
+
+  color: #6848ed;
+}
+
+.result-row:first-of-type > strong {
+  color: #6848ed;
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 850px) {
+  .results-page {
+    padding: 30px 4% 50px;
+  }
+
+  .results-header {
+    padding: 25px;
+  }
+
+  .results-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .locked-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+  .results-page {
+    padding: 20px 14px 40px;
+  }
+
+  .results-header {
+    flex-direction: column;
+
+    padding: 22px 20px;
+
+    border-radius: 17px;
+  }
+
+  .results-header h1 {
+    font-size: 24px;
+  }
+
+  .results-status {
+    align-self: flex-start;
+  }
+
+  .results-locked {
+    margin-top: 20px;
+
+    padding: 30px 20px;
+
+    border-radius: 18px;
+  }
+
+  .results-locked h2 {
+    font-size: 22px;
+  }
+
+  .results-locked > p {
+    font-size: 13px;
+  }
+
+  .official-results {
+    padding: 20px 15px;
+
+    border-radius: 17px;
+  }
+
+  .official-results h2 {
+    font-size: 19px;
+  }
+
+  .result-row {
+    gap: 10px;
+
+    padding: 15px 5px;
+  }
+
+  .result-row > span {
+    width: 30px;
+    height: 30px;
+  }
+
+  .result-row > strong {
+    font-size: 13px;
+  }
+
+  .result-row > b {
+    min-width: auto;
+
+    font-size: 12px;
+  }
+
+  .results-back-button {
+    width: 100%;
+  }
+}
