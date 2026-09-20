@@ -419,13 +419,18 @@ describe('Timer Integration & Socket Behavior', () => {
     });
 
     it('processes expiry before VOTE: subsequent vote for old candidate is rejected by pair check', async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
       // 1. Capture original pair
       const sessionInitial = store.getState().getIn(['sessions', 'sess_default']);
       const oldPair = sessionInitial.getIn(['vote', 'pair']).toJS();
       const oldCandidate = oldPair[0];
 
-      // 2. Timer expires first -> NEXT is dispatched
+      // 2. Timer expires first -> enters RESULTS_REVEALED, then NEXT after reveal
       io.timerManager.handleExpiry('sess_default', store, io);
+
+      // Wait for the default reveal timer to expire (1s + buffer)
+      await wait(1500);
 
       const sessionAfterExpiry = store.getState().getIn(['sessions', 'sess_default']);
       const newPair = sessionAfterExpiry.getIn(['vote', 'pair']).toJS();

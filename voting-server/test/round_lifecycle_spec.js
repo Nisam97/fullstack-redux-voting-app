@@ -146,6 +146,42 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
       customTm.clearAllTimers();
     });
 
+    it('3b. RESULTS_REVEALED triggers at default config without ROUND_REVEAL_DURATION env var', () => {
+      // Regression: without the fix, resolvedDuration stayed at 0 when no env var,
+      // override, or session.revealDuration was set, skipping RESULTS_REVEALED entirely.
+      store.dispatch({
+        type: 'CREATE_SESSION',
+        sessionId: 'sess_life_default_reveal',
+        title: 'Default Reveal',
+        entries: ['X', 'Y', 'Z']
+      });
+      store.dispatch({ type: 'START_SESSION', sessionId: 'sess_life_default_reveal' });
+
+      const round = getCurrentRound('sess_life_default_reveal', store);
+      const customTm = new TimerManager();
+
+      // No revealDuration override — should fall back to DEFAULT_REVEAL_DURATION
+      const result = closeRoundOnce({
+        sessionId: 'sess_life_default_reveal',
+        roundId: round.roundId,
+        store,
+        timerManager: customTm
+        // revealDuration intentionally omitted
+      });
+
+      expect(result.success).to.be.true;
+      expect(result.revealing).to.be.true;
+      expect(result.revealDuration).to.equal(DEFAULT_REVEAL_DURATION);
+
+      const session = store.getState().getIn(['sessions', 'sess_life_default_reveal']);
+      expect(session.get('roundLifecycle')).to.equal(ROUND_LIFECYCLE.RESULTS_REVEALED);
+      expect(round.lifecycle).to.equal(ROUND_LIFECYCLE.RESULTS_REVEALED);
+      expect(round.revealTimer).to.be.ok;
+      expect(round.revealTimer.status).to.equal('revealing');
+
+      customTm.clearAllTimers();
+    });
+
     it('4. reveal expiration transitions to next round (NEXT)', (done) => {
       store.dispatch({
         type: 'CREATE_SESSION',

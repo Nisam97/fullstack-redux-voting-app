@@ -18,7 +18,8 @@ import {
   validateVoterToken,
   canCastVote,
   recordVote,
-  clearVoters
+  clearVoters,
+  getVoterCount
 } from '../src/auth/voter';
 import { configureAuth, resetAuthConfig } from '../src/auth/config';
 
@@ -247,6 +248,18 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(invalidHorror.valid).to.be.false;
       expect(invalidHorror.error).to.equal('SESSION_MISMATCH');
     });
+
+    it('16. single join call registers exactly one voter (regression: no phantom duplicates)', () => {
+      expect(getVoterCount('sess_default')).to.equal(0);
+
+      registerVoter({
+        sessionId: 'sess_default',
+        displayName: 'SoloJoiner',
+        store
+      });
+
+      expect(getVoterCount('sess_default')).to.equal(1);
+    });
   });
 
   describe('Server-Side Duplicate Vote Protection', () => {
@@ -268,7 +281,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('16. missing voter token is rejected', () => {
+    it('17. missing voter token is rejected', () => {
       const check = canCastVote({
         sessionToken: null,
         sessionId: 'sess_default',
@@ -278,7 +291,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(check.error).to.equal('VOTER_TOKEN_REQUIRED');
     });
 
-    it('17. invalid voter token is rejected', () => {
+    it('18. invalid voter token is rejected', () => {
       const check = canCastVote({
         sessionToken: 'invalid-token-12345',
         sessionId: 'sess_default',
@@ -288,7 +301,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(check.error).to.equal('INVALID_TOKEN');
     });
 
-    it('18. authenticated voter can cast vote and second vote in same pair is rejected server-side', () => {
+    it('19. authenticated voter can cast vote and second vote in same pair is rejected server-side', () => {
       const join = registerVoter({
         sessionId: 'sess_default',
         displayName: 'Dana',
@@ -314,7 +327,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(secondCheck.error).to.equal('DUPLICATE_VOTE');
     });
 
-    it('19. separate voters with identical display names can vote independently', () => {
+    it('20. separate voters with identical display names can vote independently', () => {
       const voter1 = registerVoter({ sessionId: 'sess_default', displayName: 'Alex', store });
       const voter2 = registerVoter({ sessionId: 'sess_default', displayName: 'Alex', store });
 
@@ -326,7 +339,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(check2.allowed).to.be.true;
     });
 
-    it('20. advancing round allows the same voter to vote in the new pair', () => {
+    it('21. advancing round allows the same voter to vote in the new pair', () => {
       const voter = registerVoter({ sessionId: 'sess_default', displayName: 'Eve', store });
       const token = voter.voter.sessionToken;
 
@@ -404,7 +417,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       }
     });
 
-    it('21. unauthenticated client cannot execute CREATE_SESSION', (done) => {
+    it('22. unauthenticated client cannot execute CREATE_SESSION', (done) => {
       const socket = createClientSocket();
       socket.on('action_error', (errorPayload) => {
         expect(errorPayload.action).to.equal('CREATE_SESSION');
@@ -420,7 +433,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('22. client with invalid or expired JWT is rejected for NEXT', (done) => {
+    it('23. client with invalid or expired JWT is rejected for NEXT', (done) => {
       const socket = createClientSocket();
       socket.on('action_error', (errorPayload) => {
         expect(errorPayload.action).to.equal('NEXT');
@@ -435,7 +448,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('23. authenticated admin can execute NEXT with valid token', (done) => {
+    it('24. authenticated admin can execute NEXT with valid token', (done) => {
       const socket = createClientSocket();
 
       socket.emit('subscribe_session', 'sess_default');
@@ -454,7 +467,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('24. anonymous VOTE is rejected server-side without modifying state', (done) => {
+    it('25. anonymous VOTE is rejected server-side without modifying state', (done) => {
       const socket = createClientSocket();
 
       socket.on('action_error', (err) => {
@@ -472,7 +485,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('25. authenticated voter can VOTE and duplicate vote is rejected server-side', (done) => {
+    it('26. authenticated voter can VOTE and duplicate vote is rejected server-side', (done) => {
       const socket = createClientSocket();
 
       // Join session over socket
@@ -513,7 +526,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('26. voter token from another session is rejected when voting', (done) => {
+    it('27. voter token from another session is rejected when voting', (done) => {
       const socket = createClientSocket();
 
       store.dispatch({
@@ -544,6 +557,17 @@ describe('Feature 1: Two-Tier Authentication', () => {
           entry: 'Trainspotting',
           voterToken: horrorToken
         });
+      });
+    });
+
+    it('28. single join_session emit registers exactly one voter via callback voterCount', (done) => {
+      const socket = createClientSocket();
+
+      socket.emit('join_session', { sessionId: 'sess_default', displayName: 'SoleVoter' }, (joinRes) => {
+        expect(joinRes.success).to.be.true;
+        expect(joinRes.voterToken).to.be.a('string');
+        expect(joinRes.voterCount).to.equal(1);
+        done();
       });
     });
   });
@@ -584,7 +608,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       }
     });
 
-    it('27. POST /api/admin/login validates credentials and issues JWT', (done) => {
+    it('29. POST /api/admin/login validates credentials and issues JWT', (done) => {
       const payload = JSON.stringify({
         username: 'admin',
         password: 'Password123!'
@@ -613,7 +637,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
       req.end();
     });
 
-    it('28. POST /api/sessions/:id/join issues session-scoped voter token and sets cookie', (done) => {
+    it('30. POST /api/sessions/:id/join issues session-scoped voter token and sets cookie', (done) => {
       const payload = JSON.stringify({
         displayName: 'Harry'
       });
@@ -638,6 +662,33 @@ describe('Feature 1: Two-Tier Authentication', () => {
           expect(body.sessionId).to.equal('sess_default');
           expect(body.displayName).to.equal('Harry');
           expect(body.voterToken).to.be.ok;
+          done();
+        });
+      });
+
+      req.write(payload);
+      req.end();
+    });
+
+    it('31. single POST /api/sessions/:id/join increments voterCount to exactly 1 (regression)', (done) => {
+      const payload = JSON.stringify({
+        displayName: 'SoloREST'
+      });
+
+      const req = http.request(`http://localhost:${port}/api/sessions/sess_default/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        }
+      }, (res) => {
+        expect(res.statusCode).to.equal(200);
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          const body = JSON.parse(data);
+          expect(body.success).to.be.true;
+          expect(body.voterCount).to.equal(1);
           done();
         });
       });

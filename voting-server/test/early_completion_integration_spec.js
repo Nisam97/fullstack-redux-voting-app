@@ -303,9 +303,14 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       io.timerManager.handleExpiry('sess_timer_adv', round1Id, store, io);
 
       expect(roundManager.isRoundClosed('sess_timer_adv', round1Id)).to.be.true;
-      const session = store.getState().getIn(['sessions', 'sess_timer_adv']);
-      expect(session.getIn(['vote', 'pair']).toJS()).to.not.deep.equal(['Item 1', 'Item 2']);
-      done();
+
+      // Round enters RESULTS_REVEALED at default config (1s reveal).
+      // Wait for the reveal timer to expire before checking pair advanced.
+      setTimeout(() => {
+        const session = store.getState().getIn(['sessions', 'sess_timer_adv']);
+        expect(session.getIn(['vote', 'pair']).toJS()).to.not.deep.equal(['Item 1', 'Item 2']);
+        done();
+      }, 1500);
     });
 
     it('8. early completion cancels active timer and prevents subsequent expiry advance', (done) => {
@@ -370,7 +375,7 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       const round1 = roundManager.initRound('sess_stale_test', ['A', 'B']);
       tm.startTimer('sess_stale_test', 30, store, null);
 
-      // Round 1 completes early
+      // Round 1 completes early and enters RESULTS_REVEALED (reveal timer running)
       roundManager.closeRoundOnce({
         sessionId: 'sess_stale_test',
         roundId: round1.roundId,
@@ -378,10 +383,10 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
         timerManager: tm
       });
 
-      // Round 2 is now active
-      const round2 = roundManager.getCurrentRound('sess_stale_test', store);
-      expect(round2.roundId).to.not.equal(round1.roundId);
-      tm.startTimer('sess_stale_test', 30, store, null);
+      // getCurrentRound returns the active round (r1 in RESULTS_REVEALED)
+      // because the reveal timer is still running
+      const activeRound = roundManager.getCurrentRound('sess_stale_test', store);
+      expect(activeRound.roundId).to.equal(round1.roundId);
 
       let nextCount = 0;
       const origDispatch = store.dispatch;
@@ -390,12 +395,12 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
         return origDispatch(action);
       };
 
-      // Stale callback for Round 1 fires
+      // Stale callback for Round 1 fires (timer expiry callback)
+      // This should be harmless because the round is already closed
       tm.handleExpiry('sess_stale_test', round1.roundId, store, null);
 
-      // Must NOT have dispatched NEXT for Round 2
+      // Must NOT have dispatched NEXT — stale timer cannot advance the round
       expect(nextCount).to.equal(0);
-      expect(tm.getTimer('sess_stale_test').status).to.equal('running');
     });
 
     it('10. old timer cannot interfere with or cancel next round timer', () => {
@@ -573,7 +578,7 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
         setTimeout(() => {
           expect(nextCount).to.equal(1, 'NEXT must be dispatched exactly once for this round');
           done();
-        }, 150);
+        }, 1500);
       }, 50);
     });
 

@@ -216,11 +216,6 @@ export async function joinVoterSession({ sessionId, displayName }) {
       }
     }
 
-    // If socket is available, also notify socket of the join
-    if (socket && socket.connected) {
-      socket.emit('join_session', { sessionId, displayName: voterName });
-    }
-
     return {
       success: true,
       voterToken,

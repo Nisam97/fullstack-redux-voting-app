@@ -28,7 +28,7 @@ export const MAX_REVEAL_DURATION = 60;     // seconds
  * Resolves the reveal duration based on precedence:
  * 1. Override duration (if valid number)
  * 2. ROUND_REVEAL_DURATION environment variable
- * 3. DEFAULT_REVEAL_DURATION (4 seconds)
+ * 3. DEFAULT_REVEAL_DURATION (1 second)
  *
  * @param {number|undefined|null} overrideDuration
  * @returns {number}
@@ -162,6 +162,14 @@ export function getCurrentRound(sessionId, store = null) {
       : null;
 
     if (session && session.get('status') === 'open' && !session.get('winner')) {
+      // Do NOT defensively initialize a new round if the session is in RESULTS_REVEALED.
+      // A reveal timer is running and expireReveal needs the original round object.
+      const sessionLifecycle = session.get('roundLifecycle');
+      if (sessionLifecycle === ROUND_LIFECYCLE.RESULTS_REVEALED ||
+          sessionLifecycle === ROUND_LIFECYCLE.ROUND_CLOSED) {
+        return active || null;
+      }
+
       const activePair = session.getIn(['vote', 'pair']);
       const pairArray = activePair && typeof activePair.toJS === 'function'
         ? activePair.toJS()
@@ -454,10 +462,10 @@ export function closeRoundOnce({
       : null;
     if (session && session.get('revealDuration') !== undefined) {
       resolvedDuration = resolveRevealDuration(session.get('revealDuration'));
-    } else if (process.env.ROUND_REVEAL_DURATION) {
+    } else {
       resolvedDuration = resolveRevealDuration();
     }
-  } else if (process.env.ROUND_REVEAL_DURATION) {
+  } else {
     resolvedDuration = resolveRevealDuration();
   }
 

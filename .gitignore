@@ -2,17 +2,29 @@
 node_modules/
 .pnp
 .pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnpm-store/
 
 # Production and build output
 dist/
 dist-ssr/
 build/
+out/
 *.tsbuildinfo
+.parcel-cache/
+.turbo/
 
 # Environment files / secrets (CRITICAL)
 .env
 .env.*
 !.env.example
+!.env.template
+!.env.*.example
 *.local
 
 # Key material and certificates
@@ -20,6 +32,13 @@ build/
 *.key
 *.cert
 *.crt
+
+# Database and local data
+data/
+dump/
+*.sqlite
+*.sqlite3
+*.db
 
 # Logs
 logs/
@@ -33,21 +52,40 @@ lerna-debug.log*
 # Testing and coverage
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
+.playwright/
 
-# AI and local agent state
+# AI, tools, and local agent state
 .agents/
+.claude/
+.claude.json
+.freebuff/
+.gemini/
 
 # Editor and IDE state
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swo
+*.swp
 
-# OS artifacts
+# OS artifacts and temporary files
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
 Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.temp
+*.bak
