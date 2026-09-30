@@ -17,19 +17,30 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 | `src/redux/historySlice.js` | Completed tournament archive state |
 | `src/services/socket.js` | Singleton socket, room subscriptions, socket to store bridge |
 | `src/services/auth.js` | Admin JWT and session scoped voter token storage |
+| `src/pages/Home.jsx` | Home page, entry point for browsing active sessions |
+| `src/pages/Join.jsx` | Session join code entry and auto resolution at `/join` |
+| `src/pages/Register.jsx` | Static registration form, no real backend wiring, slated for rework |
 | `src/pages/Voting.jsx` | Pairwise voting arena, timer guard, vote dispatch |
+| `src/pages/Admin.jsx` | Admin dashboard, session lifecycle controls, and tie resolution panel |
+| `src/pages/Lobby.jsx` | Voter waiting room, join QR code, and real time headcount |
+| `src/pages/Results.jsx` | Post round results display, candidate tallies, and winner announcements |
 | `src/components/results/ResultsChart.jsx` | Recharts pairwise distribution chart |
+| `src/components/results/RoundTimeline.jsx` | Accordion timeline of completed rounds with per-round matchups and vote counts |
+| `src/components/results/TotalsPanel.jsx` | Cumulative candidate stats (total votes, rounds played) |
 
 ## Conventions
 
 - Session state is normalized under `bySessionId`, with `list` holding registry summaries and `activeSessionId` naming the focused session.
+- Single ballot sessions display candidates on a multi candidate grid, while tournament sessions render a pairwise matchup.
 - Internal sync actions (`SET_SESSIONS`, `SET_SESSION_STATE`, `LOBBY_UPDATE`, `TIMER_STATE`, and their aliases) must never be echoed back to the server. `LOCAL_ACTION_TYPES` in `redux/store.js` is what enforces this, so register any new local action there.
-- Only domain actions (`VOTE`, `NEXT`, `SET_ENTRIES`, `CREATE_SESSION`, `START_SESSION`, `ARCHIVE_SESSION`) are transmitted. The middleware attaches the session voter token to `VOTE` and the admin JWT to lifecycle actions.
+- Live presence and headcount updates (`PRESENCE_UPDATE`, `LOBBY_UPDATE`) track `connectedCount` and `voterCount` in `bySessionId[sessionId]`. They are registered in `LOCAL_ACTION_TYPES` to avoid echo loops.
+- Only domain actions (`VOTE`, `NEXT`, `SET_ENTRIES`, `CREATE_SESSION`, `START_SESSION`, `ARCHIVE_SESSION`, `REFRESH_JOIN_CODE`) are transmitted. The middleware attaches the session voter token to `VOTE` and the admin JWT to lifecycle actions.
 - A new server event is wired in `services/socket.js` (incoming, socket to store) and its action type added to the right Set in `redux/store.js`.
 - Selectors live in `voteSlice.js`, take `(state, sessionId?)`, fall back to the active session, and tolerate being handed either the root store state or the slice state.
 - Round scoped rendering is keyed by `getSessionPairLockKey(sessionId, pair)` so stale round data cannot leak into the next round.
 - Styling is plain CSS files sitting beside each component. There is no CSS framework or Tailwind.
 - Tests are colocated in `test/*_spec.js` and run with `node --test` and `node:assert/strict`, importing the source modules directly. There is no jsdom, component tests exercise reducers, selectors, and store middleware.
+- The `npm test` script enumerates every spec file explicitly, so a newly added `test/*_spec.js` file will not run until you add it to the script in `package.json`.
 
 ## Gotchas
 

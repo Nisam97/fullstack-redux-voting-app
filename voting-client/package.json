@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test test/voting_spec.js test/results_spec.js test/auth_spec.js test/history_spec.js test/stage_c_spec.js test/stage_d_spec.js test/stage_e_spec.js test/timer_redux_spec.js test/countdown_timer_spec.js test/timer_expiry_spec.js test/admin_timer_spec.js test/results_chart_spec.js test/results_visibility_spec.js test/results_transition_spec.js test/results_hardening_spec.js test/admin_workflow_spec.js test/early_completion_frontend_spec.js test/round_results_lifecycle_spec.js",
+    "test": "node --test test/voting_spec.js test/results_spec.js test/auth_spec.js test/history_spec.js test/stage_c_spec.js test/stage_d_spec.js test/stage_e_spec.js test/timer_redux_spec.js test/countdown_timer_spec.js test/timer_expiry_spec.js test/admin_timer_spec.js test/results_chart_spec.js test/results_visibility_spec.js test/results_transition_spec.js test/results_hardening_spec.js test/admin_workflow_spec.js test/early_completion_frontend_spec.js test/round_results_lifecycle_spec.js test/server_authority_spec.js test/admin_mode_note_spec.js test/round_history_spec.js test/single_ballot_tie_ladder_client_spec.js test/voter_auth_slice_spec.js test/review_majors_client_spec.js test/review_minors_client_spec.js test/join_code_spec.js test/presence_client_spec.js",
     "preview": "vite preview"
   },
   "dependencies": {

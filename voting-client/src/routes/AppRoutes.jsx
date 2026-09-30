@@ -1,9 +1,13 @@
+import { useEffect } from "react";
+import { useDispatch } from "react-redux";
+import { setVoterAuth, clearVoterAuth } from "../redux/voterAuthSlice";
+import { getVoterProfile } from "../services/auth";
 import Login from "../pages/Login";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "../pages/Home";
 import Voting from "../pages/Voting";
 import Results from "../pages/Results";
-import SessionList from "../pages/SessionList";
+import Join from "../pages/Join";
 import History from "../pages/History";
 import NotFound from "../pages/NotFound";
 import Register from "../pages/Register";
@@ -19,6 +23,19 @@ import {
 } from "./LegacyRedirects";
 
 function AppRoutes() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    getVoterProfile().then((res) => {
+      if (res && res.success && res.user) {
+        dispatch(setVoterAuth({ user: res.user }));
+      } else {
+        dispatch(clearVoterAuth());
+      }
+    }).catch(() => {
+      dispatch(clearVoterAuth());
+    });
+  }, [dispatch]);
   return (
     <BrowserRouter>
       <Routes>
@@ -40,8 +57,14 @@ function AppRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/history" element={<History />} />
 
+        {/* Join routes */}
+        <Route path="/join" element={<Join />} />
+        <Route path="/join/:code" element={<Join />} />
+
+        {/* Retired session list redirects to /join */}
+        <Route path="/sessions" element={<Navigate to="/join" replace />} />
+
         {/* Multi-session routes */}
-        <Route path="/sessions" element={<SessionList />} />
         <Route path="/sessions/:id/lobby" element={<Lobby />} />
         <Route path="/sessions/:id/vote" element={<Voting />} />
         <Route path="/sessions/:id/results" element={<Results />} />

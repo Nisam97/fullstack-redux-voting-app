@@ -62,6 +62,16 @@ test-results/
 .claude.json
 .freebuff/
 .gemini/
+scratch/
+test-preferences.json
+
+# Temporary test verification scripts
+verify-*.mjs
+verify-*.js
+verify-*.cjs
+.verify-*
+*.driver.mjs
+
 
 # Editor and IDE state
 .vscode/*

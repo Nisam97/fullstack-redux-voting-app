@@ -21,7 +21,9 @@ import {
   CheckCircle2,
   RefreshCw,
   Vote,
-  Sliders
+  Sliders,
+  RotateCw,
+  KeyRound
 } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import {
@@ -29,12 +31,19 @@ import {
   createSession,
   startSession,
   archiveSession,
+  refreshJoinCode,
   next,
-  selectTimerBySessionId
+  resolveTie,
+  selectTimerBySessionId,
+  setAllowlist,
+  approveParticipant,
+  rejectParticipant,
+  setWhoCanJoin
 } from "../redux/voteSlice";
 import { getSocket, subscribeSession, unsubscribeSession } from "../services/socket";
 import CountdownTimer from "../components/CountdownTimer";
 import { validateTimerDuration, DEFAULT_TIMER_DURATION } from "../utils/timerUtils";
+import { SINGLE_BALLOT_MAX } from "../constants";
 import "./Admin.css";
 
 /**
@@ -64,9 +73,16 @@ function Admin() {
   const [formError, setFormError] = useState(null);
   const [formSuccess, setFormSuccess] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [newSessionType, setNewSessionType] = useState("open");
+  const [newWhoCanJoin, setNewWhoCanJoin] = useState("allowlist");
+  const [newAllowlistText, setNewAllowlistText] = useState("");
+  const [newPublishResults, setNewPublishResults] = useState(true);
 
   // Manage Session Modal State
   const [managingSessionId, setManagingSessionId] = useState(null);
+  const [participantsData, setParticipantsData] = useState(null);
+  const [allowlistAddInput, setAllowlistAddInput] = useState("");
+  const [participantFeedback, setParticipantFeedback] = useState(null);
 
   // In-flight action tracking: { [sessionId]: 'start' | 'next' | 'archive' }
   const [pendingActions, setPendingActions] = useState({});
@@ -142,15 +158,49 @@ function Admin() {
     };
   }, [sessions]);
 
+  // Subscribe to session participants when managing a session
+  useEffect(() => {
+    if (!managingSessionId) {
+      return;
+    }
+
+    const socket = getSocket();
+    if (!socket || typeof socket.emit !== "function") return;
+
+    socket.emit("subscribe_participants", { sessionId: managingSessionId });
+
+    const handleParticipants = (data) => {
+      if (data && data.sessionId === managingSessionId) {
+        setParticipantsData(data);
+      }
+    };
+
+    socket.on("session_participants", handleParticipants);
+
+    return () => {
+      if (socket && typeof socket.emit === "function") {
+        socket.emit("unsubscribe_participants", { sessionId: managingSessionId });
+      }
+      if (socket && typeof socket.off === "function") {
+        socket.off("session_participants", handleParticipants);
+      }
+      setParticipantsData(null);
+      setParticipantFeedback(null);
+      setAllowlistAddInput("");
+    };
+  }, [managingSessionId]);
+
   // Generate QR code when a session is selected for sharing
   useEffect(() => {
     if (!qrModalSession) return;
 
     let isMounted = true;
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const lobbyUrl = `${origin}/sessions/${encodeURIComponent(qrModalSession.id)}/lobby`;
+    const shareUrl = qrModalSession.joinCode
+      ? `${origin}/join/${qrModalSession.joinCode}`
+      : `${origin}/sessions/${encodeURIComponent(qrModalSession.id)}/lobby`;
 
-    QRCode.toDataURL(lobbyUrl, {
+    QRCode.toDataURL(shareUrl, {
       width: 260,
       margin: 2,
       color: {
@@ -228,13 +278,29 @@ function Admin() {
 
     setIsCreating(true);
 
-    // Dispatch CREATE_SESSION via socket remote action middleware
-    dispatch(createSession({
+    const sessionPayload = {
       sessionId: cleanId,
       title,
       entries,
-      timerDuration: durationValidation.value
-    }));
+      timerDuration: durationValidation.value,
+      sessionType: newSessionType,
+      type: newSessionType,
+      whoCanJoin: newSessionType === "secured" ? newWhoCanJoin : "public",
+      publishResultsPublicly: newSessionType === "secured" ? newPublishResults : true
+    };
+
+    // Dispatch CREATE_SESSION via socket remote action middleware
+    dispatch(createSession(sessionPayload));
+
+    if (newSessionType === "secured" && newWhoCanJoin === "allowlist" && newAllowlistText.trim()) {
+      const initialEmails = newAllowlistText
+        .split(/[\n,;]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.length > 0);
+      if (initialEmails.length > 0) {
+        dispatch(setAllowlist(cleanId, initialEmails));
+      }
+    }
 
     setTimeout(() => {
       setIsCreating(false);
@@ -243,8 +309,47 @@ function Admin() {
       setNewSessionId("");
       setNewEntriesText("");
       setNewTimerDuration(String(DEFAULT_TIMER_DURATION));
+      setNewSessionType("open");
+      setNewWhoCanJoin("allowlist");
+      setNewAllowlistText("");
+      setNewPublishResults(true);
       setShowCreateModal(false);
     }, 400);
+  };
+
+  // Participant Management Action Handlers (Secured Sessions)
+  const handleAddAllowlistEmails = () => {
+    if (!managingSessionId || !allowlistAddInput.trim()) return;
+    const emails = allowlistAddInput
+      .split(/[\n,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.length > 0);
+    if (emails.length === 0) return;
+
+    const existingEmails = participantsData?.entries?.map((e) => e.email.toLowerCase()) || [];
+    const merged = Array.from(new Set([...existingEmails, ...emails]));
+    dispatch(setAllowlist(managingSessionId, merged));
+    setAllowlistAddInput("");
+    setParticipantFeedback(`Added ${emails.length} email(s) to allowlist.`);
+    setTimeout(() => setParticipantFeedback(null), 3000);
+  };
+
+  const handleApproveParticipant = (requestId) => {
+    if (!managingSessionId || !requestId) return;
+    dispatch(approveParticipant(managingSessionId, requestId));
+  };
+
+  const handleRejectParticipant = (requestId) => {
+    if (!managingSessionId || !requestId) return;
+    dispatch(rejectParticipant(managingSessionId, requestId));
+  };
+
+  const handleSwitchWhoCanJoin = (newMode) => {
+    if (!managingSessionId || !newMode) return;
+    const confirmed = window.confirm(`Switch access mode to "${newMode}"?`);
+    if (confirmed) {
+      dispatch(setWhoCanJoin(managingSessionId, newMode));
+    }
   };
 
   // Lifecycle Action Handlers
@@ -306,9 +411,27 @@ function Admin() {
     }, 600);
   };
 
-  const copyShareLink = (sessionId) => {
+  const handleRefreshCode = (sessionId) => {
+    if (pendingActions[sessionId]) return;
+    setServerError(null);
+    setPendingActions((prev) => ({ ...prev, [sessionId]: "refresh_code" }));
+
+    dispatch(refreshJoinCode(sessionId));
+
+    setTimeout(() => {
+      setPendingActions((prev) => {
+        const nextState = { ...prev };
+        delete nextState[sessionId];
+        return nextState;
+      });
+    }, 600);
+  };
+
+  const copyShareLink = (sessionId, joinCode) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${origin}/sessions/${encodeURIComponent(sessionId)}/lobby`;
+    const url = joinCode
+      ? `${origin}/join/${joinCode}`
+      : `${origin}/sessions/${encodeURIComponent(sessionId)}/lobby`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(() => {
         setHasCopied(true);
@@ -345,6 +468,42 @@ function Admin() {
     ? (selectTimerBySessionId({ sessions: { bySessionId } }, managingSessionId) || managingDetailed.timer || null)
     : null;
   const managingAction = managingSessionId ? pendingActions[managingSessionId] : null;
+
+  const isManagingTiePending = managingDetailed?.roundLifecycle === "TIE_PENDING" || managingSession?.roundLifecycle === "TIE_PENDING";
+  const managingTiePending = managingDetailed?.tiePending || managingSession?.tiePending || null;
+  const managingCandidates = Array.isArray(managingTiePending?.candidates) && managingTiePending.candidates.length > 0
+    ? managingTiePending.candidates
+    : (Array.isArray(managingVote?.candidates) && managingVote.candidates.length > 0
+        ? managingVote.candidates
+        : managingPair);
+  const managingRoundId = managingTiePending?.roundId || managingDetailed?.roundId || managingSession?.roundId || null;
+  const isManagingSecured = managingSession?.sessionType === "secured" || managingSession?.type === "secured" || managingDetailed?.type === "secured";
+  const managingWhoCanJoin = managingSession?.whoCanJoin || managingDetailed?.whoCanJoin || "allowlist";
+
+  const [selectedTieWinner, setSelectedTieWinner] = useState("");
+
+  const handleResolveTieAction = (choice, winnerChoice) => {
+    if (!managingSessionId) return;
+    const sId = managingSessionId;
+    if (pendingActions[sId]) return;
+    setServerError(null);
+    setPendingActions((prev) => ({ ...prev, [sId]: `resolve_${choice}` }));
+
+    dispatch(resolveTie({
+      sessionId: sId,
+      roundId: managingRoundId,
+      choice,
+      ...(choice === "pick" ? { winner: winnerChoice || selectedTieWinner || (managingCandidates[0] || "") } : {})
+    }));
+
+    setTimeout(() => {
+      setPendingActions((prev) => {
+        const nextState = { ...prev };
+        delete nextState[sId];
+        return nextState;
+      });
+    }, 600);
+  };
 
   return (
     <div className="admin-page">
@@ -406,6 +565,41 @@ function Admin() {
               aria-label="Dismiss message"
             >
               <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Active Tie Pending Banner across sessions (AC-6, AC-7) */}
+        {sessions.some((s) => (bySessionId[s.id]?.roundLifecycle === "TIE_PENDING" || s.roundLifecycle === "TIE_PENDING")) && (
+          <div
+            className="admin-alert"
+            style={{
+              background: "rgba(245, 158, 11, 0.15)",
+              borderColor: "rgba(245, 158, 11, 0.35)",
+              color: "#fbbf24",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}
+            role="alert"
+            data-testid="admin-tie-alert-banner"
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Clock size={20} />
+              <span>
+                A voting session has tied and is awaiting tie resolution!
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                const tied = sessions.find((s) => bySessionId[s.id]?.roundLifecycle === "TIE_PENDING" || s.roundLifecycle === "TIE_PENDING");
+                if (tied) setManagingSessionId(tied.id);
+              }}
+              className="admin-btn admin-btn-warning"
+              style={{ padding: "0.25rem 0.75rem", fontSize: "0.8rem" }}
+              data-testid="admin-resolve-tie-banner-btn"
+            >
+              Resolve Tie
             </button>
           </div>
         )}
@@ -549,6 +743,68 @@ function Admin() {
                           {currentStatus}
                         </span>
 
+                        {(session.type === "secured" || session.sessionType === "secured" || detailedSession.type === "secured") && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              fontSize: "0.8rem",
+                              color: "#38bdf8",
+                              background: "rgba(56, 189, 248, 0.15)",
+                              border: "1px solid rgba(56, 189, 248, 0.3)",
+                              padding: "0.2rem 0.55rem",
+                              borderRadius: "6px",
+                              fontWeight: 700
+                            }}
+                            data-testid={`session-secured-badge-${session.id}`}
+                          >
+                            <ShieldCheck size={13} /> Secured ({session.whoCanJoin || detailedSession.whoCanJoin || "allowlist"})
+                          </span>
+                        )}
+
+                        {(detailedSession.roundLifecycle === "TIE_PENDING" || session.roundLifecycle === "TIE_PENDING") && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              fontSize: "0.8rem",
+                              color: "#fbbf24",
+                              background: "rgba(245, 158, 11, 0.2)",
+                              border: "1px solid rgba(245, 158, 11, 0.4)",
+                              padding: "0.2rem 0.55rem",
+                              borderRadius: "6px",
+                              fontWeight: 700
+                            }}
+                            data-testid={`session-tie-badge-${session.id}`}
+                          >
+                            <Clock size={13} /> Tie Pending
+                          </span>
+                        )}
+
+                        {session.joinCode && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              fontSize: "0.85rem",
+                              color: "#38bdf8",
+                              background: "rgba(56, 189, 248, 0.12)",
+                              border: "1px solid rgba(56, 189, 248, 0.25)",
+                              padding: "0.2rem 0.55rem",
+                              borderRadius: "6px",
+                              fontWeight: 700,
+                              fontFamily: "monospace"
+                            }}
+                            data-testid={`session-joincode-${session.id}`}
+                            title={`Join Code: ${session.joinCode}`}
+                          >
+                            <KeyRound size={13} /> {session.joinCode}
+                          </span>
+                        )}
+
                         <span
                           style={{
                             display: "inline-flex",
@@ -608,11 +864,11 @@ function Admin() {
                           <div className="admin-pair-matchup">
                             <span style={{ color: "#94a3b8" }}>Active Pair:</span>
                             <span className="admin-candidate-chip">
-                              {activePair[0]} ({tally[activePair[0]] || 0})
+                              {activePair[0]}{typeof tally[activePair[0]] === "number" && tally[activePair[0]] > 0 ? ` (${tally[activePair[0]]})` : ""}
                             </span>
                             <span className="admin-vs">VS</span>
                             <span className="admin-candidate-chip">
-                              {activePair[1]} ({tally[activePair[1]] || 0})
+                              {activePair[1]}{typeof tally[activePair[1]] === "number" && tally[activePair[1]] > 0 ? ` (${tally[activePair[1]]})` : ""}
                             </span>
                           </div>
                         )}
@@ -678,6 +934,22 @@ function Admin() {
                           >
                             <Trophy size={14} /> Results
                           </Link>
+                        )}
+
+                        {!isArchived && (
+                          <button
+                            type="button"
+                            onClick={() => handleRefreshCode(session.id)}
+                            className="admin-btn admin-btn-outline"
+                            title="Refresh Session Join Code"
+                            data-testid={`refresh-code-${session.id}`}
+                          >
+                            <RotateCw
+                              size={14}
+                              className={pendingActions[session.id] === "refresh_code" ? "voting-spinner" : ""}
+                            />{" "}
+                            Refresh Code
+                          </button>
                         )}
 
                         <button
@@ -861,7 +1133,87 @@ function Admin() {
                 <span className="admin-help-text">
                   Provide at least 2 entries. Entries will be paired authoritatively by the tournament engine.
                 </span>
+                <div
+                  className="admin-mode-note"
+                  style={{
+                    marginTop: "0.5rem",
+                    fontSize: "0.85rem",
+                    color: "#818cf8",
+                    fontWeight: 600
+                  }}
+                  data-testid="create-session-mode-note"
+                >
+                  {Array.from(new Set(newEntriesText.split(/[\n,]+/).map((item) => item.trim()).filter((item) => item.length > 0))).length > SINGLE_BALLOT_MAX
+                    ? "7 or more candidates: Tournament"
+                    : "2 to 6 candidates: Single Ballot"}
+                </div>
               </div>
+
+              {/* Session Type and Access Control */}
+              <div className="admin-form-grid" style={{ marginBottom: "1.25rem" }}>
+                <div className="admin-form-group">
+                  <label htmlFor="session-type-select">Session Access Type *</label>
+                  <select
+                    id="session-type-select"
+                    className="admin-input"
+                    value={newSessionType}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewSessionType(val);
+                      if (val === "secured") {
+                        setNewPublishResults(false);
+                      }
+                    }}
+                    disabled={isCreating}
+                    data-testid="create-session-type-select"
+                  >
+                    <option value="open">Public (Open to anyone)</option>
+                    <option value="secured">Secured (Restricted Access)</option>
+                  </select>
+                  <span className="admin-help-text">
+                    Secured sessions require authenticated voter identity and access control.
+                  </span>
+                </div>
+
+                {newSessionType === "secured" && (
+                  <div className="admin-form-group">
+                    <label htmlFor="who-can-join-select">Who Can Join *</label>
+                    <select
+                      id="who-can-join-select"
+                      className="admin-input"
+                      value={newWhoCanJoin}
+                      onChange={(e) => setNewWhoCanJoin(e.target.value)}
+                      disabled={isCreating}
+                      data-testid="create-who-can-join-select"
+                    >
+                      <option value="allowlist">Allowlist (Pre-approved email list)</option>
+                      <option value="approval">Approval (Organizer reviews join requests)</option>
+                    </select>
+                    <span className="admin-help-text">
+                      Allowlist checks participant email; approval queues requests for admin review.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {newSessionType === "secured" && newWhoCanJoin === "allowlist" && (
+                <div className="admin-form-group" style={{ marginBottom: "1.25rem" }}>
+                  <label htmlFor="session-allowlist">Initial Allowlist Emails (Optional)</label>
+                  <textarea
+                    id="session-allowlist"
+                    className="admin-textarea"
+                    rows={3}
+                    placeholder="voter1@example.com&#10;voter2@example.com"
+                    value={newAllowlistText}
+                    onChange={(e) => setNewAllowlistText(e.target.value)}
+                    disabled={isCreating}
+                    data-testid="create-session-allowlist-input"
+                  />
+                  <span className="admin-help-text">
+                    Enter email addresses separated by commas or newlines.
+                  </span>
+                </div>
+              )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", borderTop: "1px solid rgba(148, 163, 184, 0.15)", paddingTop: "1rem" }}>
                 <button
@@ -976,8 +1328,86 @@ function Admin() {
               </div>
             </div>
 
+            {/* Tie Pending Resolution Panel (AC-7, AC-8) */}
+            {isManagingTiePending && (
+              <div
+                className="admin-manage-section"
+                style={{
+                  background: "rgba(245, 158, 11, 0.12)",
+                  borderColor: "rgba(245, 158, 11, 0.35)"
+                }}
+                data-testid="manage-tie-pending-section"
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <h4 className="admin-manage-section-title" style={{ color: "#fbbf24", margin: 0 }}>
+                    <Clock size={16} /> Tie Resolution Window
+                  </h4>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "9999px", background: "rgba(245, 158, 11, 0.25)", color: "#fef08a" }}>
+                    30s AUTHORITATIVE TIMEOUT
+                  </span>
+                </div>
+
+                <p style={{ fontSize: "0.875rem", color: "#f8fafc", margin: "0 0 1rem 0" }}>
+                  Matchup tied consecutively. As administrator, you may select a winner directly or trigger an immediate coin flip. If no action is taken before timeout, the server will execute an authoritative coin flip automatically.
+                </p>
+
+                {managingTiePending?.expiresAt && (
+                  <div style={{ marginBottom: "1rem" }}>
+                    <CountdownTimer
+                      timer={{ expiresAt: managingTiePending.expiresAt, duration: managingTiePending.duration || 30, status: "running" }}
+                      label="AUTOMATIC COIN FLIP IN"
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: "240px" }}>
+                    <label htmlFor="tie-pick-select" style={{ fontSize: "0.85rem", color: "#cbd5e1", whiteSpace: "nowrap" }}>
+                      Pick Winner:
+                    </label>
+                    <select
+                      id="tie-pick-select"
+                      className="admin-input"
+                      style={{ padding: "0.5rem", fontSize: "0.85rem", flex: 1 }}
+                      value={selectedTieWinner || (managingCandidates[0] || "")}
+                      onChange={(e) => setSelectedTieWinner(e.target.value)}
+                      disabled={Boolean(managingAction)}
+                      data-testid="tie-pick-select"
+                    >
+                      {managingCandidates.map((cand) => (
+                        <option key={cand} value={cand}>
+                          {cand}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleResolveTieAction("pick", selectedTieWinner || managingCandidates[0])}
+                      disabled={Boolean(managingAction) || managingCandidates.length === 0}
+                      className="admin-btn admin-btn-primary"
+                      style={{ padding: "0.5rem 0.9rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                      data-testid="tie-pick-btn"
+                    >
+                      {managingAction === "resolve_pick" ? "Picking..." : "Confirm Pick"}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleResolveTieAction("coin_flip")}
+                    disabled={Boolean(managingAction)}
+                    className="admin-btn admin-btn-warning"
+                    style={{ padding: "0.5rem 0.9rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                    data-testid="tie-flip-btn"
+                  >
+                    {managingAction === "resolve_coin_flip" ? "Flipping..." : "Flip Coin Now"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Live Round Details (if open) */}
-            {isManagingOpen && (
+            {isManagingOpen && !isManagingTiePending && (
               <div className="admin-manage-section" data-testid="manage-live-section">
                 <h4 className="admin-manage-section-title">
                   <Play size={15} style={{ color: "#4ade80" }} /> Live Round Status
@@ -1030,6 +1460,157 @@ function Admin() {
               </div>
             )}
 
+            {/* Participant Management (Secured Sessions) */}
+            {isManagingSecured && (
+              <div className="admin-manage-section" style={{ background: "rgba(56, 189, 248, 0.05)", borderColor: "rgba(56, 189, 248, 0.25)" }} data-testid="manage-participants-section">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <h4 className="admin-manage-section-title" style={{ color: "#38bdf8", margin: 0 }}>
+                    <Users size={16} /> Participant Access &amp; Security
+                  </h4>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>Mode:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchWhoCanJoin(managingWhoCanJoin === "allowlist" ? "approval" : "allowlist")}
+                      className="admin-btn admin-btn-outline"
+                      style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem" }}
+                      data-testid="switch-who-can-join-btn"
+                    >
+                      Switch to {managingWhoCanJoin === "allowlist" ? "Approval" : "Allowlist"}
+                    </button>
+                  </div>
+                </div>
+
+                {participantFeedback && (
+                  <div className="admin-alert admin-alert-success" style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", fontSize: "0.85rem" }}>
+                    {participantFeedback}
+                  </div>
+                )}
+
+                {/* Counts Summary */}
+                {participantsData?.counts && (
+                  <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                    {managingWhoCanJoin === "allowlist" ? (
+                      <>
+                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
+                          Allowlisted: <strong style={{ color: "#38bdf8" }}>{participantsData.counts.allowlistedCount || 0}</strong>
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
+                          Joined: <strong style={{ color: "#4ade80" }}>{participantsData.counts.joinedCount || 0}</strong>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
+                          Pending Requests: <strong style={{ color: "#fbbf24" }}>{participantsData.counts.pendingCount || 0}</strong>
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "#4ade80" }}>
+                          Approved: <strong style={{ color: "#4ade80" }}>{participantsData.counts.approvedCount || 0}</strong>
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
+                          Rejected: <strong style={{ color: "#ef4444" }}>{participantsData.counts.rejectedCount || 0}</strong>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Allowlist Mode Controls */}
+                {managingWhoCanJoin === "allowlist" && (
+                  <div>
+                    <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                      <input
+                        type="text"
+                        className="admin-input"
+                        placeholder="Add emails (comma or space separated)"
+                        value={allowlistAddInput}
+                        onChange={(e) => setAllowlistAddInput(e.target.value)}
+                        style={{ flex: 1, fontSize: "0.85rem" }}
+                        data-testid="allowlist-add-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddAllowlistEmails}
+                        className="admin-btn admin-btn-primary"
+                        style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                        data-testid="allowlist-add-btn"
+                      >
+                        Add to Allowlist
+                      </button>
+                    </div>
+
+                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid rgba(148, 163, 184, 0.15)", borderRadius: "8px", padding: "0.5rem" }}>
+                      {participantsData?.entries && participantsData.entries.length > 0 ? (
+                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                          {participantsData.entries.map((entry) => (
+                            <li key={entry.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.3rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                              <span style={{ color: "#f8fafc" }}>{entry.email}</span>
+                              <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: entry.status === "joined" ? "rgba(74, 222, 128, 0.15)" : "rgba(56, 189, 248, 0.15)", color: entry.status === "joined" ? "#4ade80" : "#38bdf8" }}>
+                                {entry.status}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p style={{ margin: 0, padding: "0.5rem", color: "#94a3b8", fontSize: "0.85rem", textAlign: "center" }}>
+                          No emails on the allowlist yet. Add emails above to grant voter access.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Approval Mode Controls */}
+                {managingWhoCanJoin === "approval" && (
+                  <div>
+                    <h5 style={{ margin: "0 0 0.5rem 0", color: "#fbbf24", fontSize: "0.85rem" }}>
+                      Pending Join Requests
+                    </h5>
+                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid rgba(148, 163, 184, 0.15)", borderRadius: "8px", padding: "0.5rem", marginBottom: "0.75rem" }}>
+                      {participantsData?.entries && participantsData.entries.filter((e) => e.status === "pending").length > 0 ? (
+                        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                          {participantsData.entries
+                            .filter((e) => e.status === "pending")
+                            .map((req) => (
+                              <li key={req.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                                <div>
+                                  <div style={{ color: "#f8fafc", fontWeight: 600 }}>{req.displayName || req.email}</div>
+                                  <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{req.email}</div>
+                                </div>
+                                <div style={{ display: "flex", gap: "0.4rem" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveParticipant(req.id)}
+                                    className="admin-btn admin-btn-success"
+                                    style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+                                    data-testid={`approve-participant-${req.id}`}
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectParticipant(req.id)}
+                                    className="admin-btn admin-btn-danger"
+                                    style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+                                    data-testid={`reject-participant-${req.id}`}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p style={{ margin: 0, padding: "0.5rem", color: "#94a3b8", fontSize: "0.85rem", textAlign: "center" }}>
+                          No pending join requests.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Lifecycle Mutation Controls Section */}
             <div className="admin-manage-section">
               <h4 className="admin-manage-section-title">
@@ -1074,6 +1655,28 @@ function Admin() {
                     ) : (
                       <>
                         <SkipForward size={15} /> Next Pair
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Refresh Join Code (Pending, Open, Completed — NOT Archived) */}
+                {!isManagingArchived && (
+                  <button
+                    type="button"
+                    onClick={() => handleRefreshCode(managingSession.id)}
+                    disabled={Boolean(managingAction) || pendingActions[managingSession.id] === "refresh_code"}
+                    className="admin-btn admin-btn-outline"
+                    title="Refresh Session Join Code"
+                    data-testid="manage-refresh-code-btn"
+                  >
+                    {pendingActions[managingSession.id] === "refresh_code" ? (
+                      <>
+                        <RotateCw size={15} className="voting-spinner" /> Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <RotateCw size={15} /> Refresh Code
                       </>
                     )}
                   </button>
@@ -1217,12 +1820,16 @@ function Admin() {
                 type="text"
                 readOnly
                 className="admin-share-input"
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}/sessions/${encodeURIComponent(qrModalSession.id)}/lobby`}
+                value={
+                  qrModalSession.joinCode
+                    ? `${typeof window !== "undefined" ? window.location.origin : ""}/join/${qrModalSession.joinCode}`
+                    : `${typeof window !== "undefined" ? window.location.origin : ""}/sessions/${encodeURIComponent(qrModalSession.id)}/lobby`
+                }
                 data-testid="qr-share-url-input"
               />
               <button
                 type="button"
-                onClick={() => copyShareLink(qrModalSession.id)}
+                onClick={() => copyShareLink(qrModalSession.id, qrModalSession.joinCode)}
                 className="admin-btn admin-btn-primary"
                 style={{ padding: "0.5rem 0.9rem" }}
                 data-testid="qr-copy-btn"

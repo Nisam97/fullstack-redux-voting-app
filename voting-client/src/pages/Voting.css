@@ -244,11 +244,43 @@
   flex-shrink: 0;
 }
 
+/* Multi-candidate grid for single ballot mode */
+.candidates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+  width: 100%;
+  max-width: 960px;
+  margin-bottom: 36px;
+  justify-items: center;
+}
+
+.candidates-grid .vote-card {
+  width: 100%;
+  max-width: 320px;
+}
+
+.feedback-tie-pending {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.feedback-tie-pending .feedback-icon {
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .matchup-arena {
     flex-direction: column;
     gap: 20px;
+  }
+
+  .candidates-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .pairwise-title {

@@ -4,19 +4,19 @@ import crypto from 'crypto';
  * In-memory repository of registered voters.
  * Keyed by sessionToken -> Voter object.
  */
-const votersByToken = new Map();
+export const votersByToken = new Map();
 
 /**
  * In-memory set of recorded vote keys to enforce server-side duplicate vote prevention:
  * Key format: `${sessionId}:::${sortedPairKey}:::${sessionToken}`
  */
-const recordedVotes = new Set();
+export const recordedVotes = new Set();
 
 /**
  * In-memory index of sessionToken sets per sessionId.
  * Enables O(1) session-isolated voter headcount tracking without leaking tokens.
  */
-const tokensBySession = new Map();
+export const tokensBySession = new Map();
 
 /**
  * Registers a new session-scoped voter identity.
@@ -33,7 +33,7 @@ const tokensBySession = new Map();
  * @param {Object} params.store - Redux store to check session validity
  * @returns {{ success: boolean, voter?: Object, error?: string, message?: string }}
  */
-export function registerVoter({ sessionId, displayName, store }) {
+export function registerVoter({ sessionId, displayName, store, userId }) {
   if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
     return {
       success: false,
@@ -77,13 +77,16 @@ export function registerVoter({ sessionId, displayName, store }) {
     }
   }
 
-  // Issue random, unguessable session-scoped token
-  const sessionToken = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(24).toString('hex');
+  // Use synthetic user:userId key for signed in voters (AC-12), or random token for anonymous
+  const sessionToken = userId
+    ? `user:${userId}`
+    : (crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(24).toString('hex'));
 
   const voter = {
     sessionId: normalizedSessionId,
     displayName: displayName.trim(),
     sessionToken,
+    userId: userId || null,
     joinedAt: new Date().toISOString()
   };
 
@@ -117,7 +120,8 @@ export function validateVoterToken(sessionToken, targetSessionId) {
     };
   }
 
-  const voter = votersByToken.get(sessionToken.trim());
+  const token = sessionToken.trim();
+  const voter = votersByToken.get(token);
   if (!voter) {
     return {
       valid: false,
@@ -126,12 +130,17 @@ export function validateVoterToken(sessionToken, targetSessionId) {
     };
   }
 
-  if (targetSessionId && voter.sessionId !== targetSessionId.trim()) {
-    return {
-      valid: false,
-      error: 'SESSION_MISMATCH',
-      message: `Voter token is scoped to session "${voter.sessionId}", not "${targetSessionId}".`
-    };
+  if (targetSessionId) {
+    const normSession = targetSessionId.trim();
+    const hasJoined = (voter.sessionId === normSession) ||
+      Boolean(tokensBySession.get(normSession) && tokensBySession.get(normSession).has(token));
+    if (!hasJoined) {
+      return {
+        valid: false,
+        error: 'SESSION_MISMATCH',
+        message: `Voter token is scoped to session "${voter.sessionId}", not "${targetSessionId}".`
+      };
+    }
   }
 
   return {
@@ -141,18 +150,24 @@ export function validateVoterToken(sessionToken, targetSessionId) {
 }
 
 /**
- * Builds the unique duplicate-vote key for the specified session, round pair, and voter token.
+ * Builds the unique duplicate-vote key for the specified session, round, pair, and voter token.
+ *
+ * The round id scopes the key so a pair that meets again in a later round (possible
+ * after ties) accepts fresh votes. When roundId is omitted the key falls back to the
+ * legacy pair scoped shape for backwards compatibility.
  *
  * @param {string} sessionId
  * @param {Array<string>|string} pair
  * @param {string} sessionToken
+ * @param {string} [roundId]
  * @returns {string}
  */
-export function buildVoteKey(sessionId, pair, sessionToken) {
+export function buildVoteKey(sessionId, pair, sessionToken, roundId) {
   const pairKey = Array.isArray(pair)
     ? [...pair].sort().join(':::')
     : String(pair || '');
-  return `${sessionId}:::${pairKey}:::${sessionToken}`;
+  const roundPart = roundId ? `${roundId}:::` : '';
+  return `${sessionId}:::${roundPart}${pairKey}:::${sessionToken}`;
 }
 
 /**
@@ -167,9 +182,10 @@ export function buildVoteKey(sessionId, pair, sessionToken) {
  * @param {string} params.sessionToken
  * @param {string} params.sessionId
  * @param {Array<string>} params.pair
+ * @param {string} [params.roundId] - Current round id; scopes the duplicate key per round
  * @returns {{ allowed: boolean, voteKey?: string, voter?: Object, error?: string, message?: string }}
  */
-export function canCastVote({ sessionToken, sessionId, pair }) {
+export function canCastVote({ sessionToken, sessionId, pair, roundId }) {
   const tokenValidation = validateVoterToken(sessionToken, sessionId);
   if (!tokenValidation.valid) {
     return {
@@ -187,7 +203,7 @@ export function canCastVote({ sessionToken, sessionId, pair }) {
     };
   }
 
-  const voteKey = buildVoteKey(sessionId, pair, sessionToken.trim());
+  const voteKey = buildVoteKey(sessionId, pair, sessionToken.trim(), roundId);
   if (recordedVotes.has(voteKey)) {
     return {
       allowed: false,
@@ -221,6 +237,62 @@ export function recordVote(voteKey) {
  */
 export function getVoter(sessionToken) {
   return votersByToken.get(sessionToken) || null;
+}
+
+/**
+ * Drops one session's voter registry: tokens, headcount index, and recorded vote
+ * keys. Called when a session completes or is archived (both terminal states that
+ * can no longer accept votes) so a long running server does not accumulate voter
+ * memory forever.
+ *
+ * @param {string} sessionId
+ * @returns {{ removedTokens: number, removedVoteKeys: number }}
+ */
+export function releaseSessionVoters(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string') {
+    return { removedTokens: 0, removedVoteKeys: 0 };
+  }
+
+  const normalizedId = sessionId.trim();
+  let removedTokens = 0;
+  let removedVoteKeys = 0;
+
+  const tokens = tokensBySession.get(normalizedId);
+  if (tokens) {
+    for (const token of tokens) {
+      if (token.startsWith('user:')) {
+        let inOtherSession = false;
+        for (const [sId, tokenSet] of tokensBySession.entries()) {
+          if (sId !== normalizedId && tokenSet.has(token)) {
+            inOtherSession = true;
+            break;
+          }
+        }
+        if (!inOtherSession) {
+          if (votersByToken.delete(token)) {
+            removedTokens += 1;
+          }
+        }
+      } else {
+        if (votersByToken.delete(token)) {
+          removedTokens += 1;
+        }
+      }
+    }
+    tokensBySession.delete(normalizedId);
+  }
+
+  // Vote keys always start with `${sessionId}:::`, in both the round scoped and
+  // the legacy pair scoped shape, so a prefix match is exact session isolation.
+  const prefix = `${normalizedId}:::`;
+  for (const key of recordedVotes) {
+    if (key.startsWith(prefix)) {
+      recordedVotes.delete(key);
+      removedVoteKeys += 1;
+    }
+  }
+
+  return { removedTokens, removedVoteKeys };
 }
 
 /**

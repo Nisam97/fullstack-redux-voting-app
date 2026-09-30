@@ -345,3 +345,135 @@ export function getGuardedResultsPresentation({
   };
 }
 
+/**
+ * Human-readable labels for round settlement resolution types (AC-6).
+ */
+export const RESOLUTION_LABELS = {
+  majority_win: 'Majority Win',
+  tie_advance: 'Tie, Both Advanced',
+  runoff: 'Runoff Rematch',
+  admin_pick: 'Admin Decision',
+  coin_flip: 'Coin Flip',
+  no_result: 'No Result',
+  zero_vote_replay: 'Zero-Vote Replay',
+  WINNER: 'Winner',
+  TIE_REQUEUED: 'Tie — Re-queued',
+  TIE_COIN_TOSS: 'Tie — Decided by coin toss'
+};
+
+/**
+ * Formats a settlement resolution enum into human-readable text (AC-6).
+ *
+ * @param {string} resolution
+ * @param {Array<string>} [advanced=[]]
+ * @returns {string}
+ */
+export function formatResolution(resolution, advanced = []) {
+  if (!resolution || typeof resolution !== 'string') return '';
+  if (resolution === 'majority_win' || resolution === 'WINNER') {
+    if (Array.isArray(advanced) && advanced.length > 0) {
+      return `Winner: ${advanced[0]}`;
+    }
+    return 'Winner declared';
+  }
+  if (resolution === 'tie_advance' || resolution === 'TIE_REQUEUED') {
+    return 'Tie — Re-queued';
+  }
+  if (resolution === 'TIE_COIN_TOSS') {
+    return 'Tie — Decided by coin toss';
+  }
+  if (resolution === 'coin_flip') {
+    return 'Coin Flip';
+  }
+  return RESOLUTION_LABELS[resolution] || 'Round complete';
+}
+
+/**
+ * Aggregates votes across all closed rounds into summary totals (AC-5).
+ *
+ * @param {Array<object>} [rounds=[]] - Array of round snapshots
+ * @returns {{
+ *   totals: Object<string, number>,
+ *   totalVotesAllRounds: number,
+ *   roundsPlayed: number,
+ *   totalRounds: number,
+ *   totalVotes: number,
+ *   sortedCandidates: Array<{ candidate: string, name: string, votes: number, totalVotes: number, percentage: number, fill: string, wins: number, losses: number }>,
+ *   candidates: Array<{ candidate: string, name: string, votes: number, totalVotes: number, percentage: number, fill: string, wins: number, losses: number }>
+ * }}
+ */
+export function deriveTotals(rounds = []) {
+  if (!Array.isArray(rounds)) {
+    return {
+      totals: {},
+      totalVotesAllRounds: 0,
+      roundsPlayed: 0,
+      totalRounds: 0,
+      totalVotes: 0,
+      sortedCandidates: [],
+      candidates: []
+    };
+  }
+
+  const totals = {};
+  const winLoss = {};
+  let totalVotesAllRounds = 0;
+
+  for (const round of rounds) {
+    if (!round || !round.tally || typeof round.tally !== 'object') {
+      continue;
+    }
+
+    const advancedList = Array.isArray(round.advanced) ? round.advanced : [];
+    const candidatesInRound = Array.isArray(round.candidates)
+      ? round.candidates
+      : Object.keys(round.tally);
+
+    for (const [candidate, count] of Object.entries(round.tally)) {
+      const votes = typeof count === 'number' && Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
+      totals[candidate] = (totals[candidate] || 0) + votes;
+      totalVotesAllRounds += votes;
+    }
+
+    if (round.resolution === 'WINNER' || round.resolution === 'majority_win') {
+      for (const cand of candidatesInRound) {
+        if (!winLoss[cand]) winLoss[cand] = { wins: 0, losses: 0 };
+        if (advancedList.includes(cand)) {
+          winLoss[cand].wins += 1;
+        } else {
+          winLoss[cand].losses += 1;
+        }
+      }
+    }
+  }
+
+  const sortedCandidates = Object.entries(totals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([candidate, votes], index) => {
+      const percentage = calculatePercentage(votes, totalVotesAllRounds);
+      const fill = CONTENDER_COLORS[index % CONTENDER_COLORS.length];
+      const wl = winLoss[candidate] || { wins: 0, losses: 0 };
+      return {
+        candidate,
+        name: candidate,
+        votes,
+        totalVotes: votes,
+        percentage,
+        fill,
+        wins: wl.wins,
+        losses: wl.losses
+      };
+    });
+
+  return {
+    totals,
+    totalVotesAllRounds,
+    roundsPlayed: rounds.length,
+    totalRounds: rounds.length,
+    totalVotes: totalVotesAllRounds,
+    sortedCandidates,
+    candidates: sortedCandidates
+  };
+}
+
+

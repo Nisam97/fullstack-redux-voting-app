@@ -847,5 +847,54 @@ All notable changes, architectural decisions, and progress updates for the Full-
 
 **Result:** Feature 8 is 100% complete, fully tested, documented, and certified for final project sign-off.
 
+***
+
+### Date: 2026-09-27
+**Phase:** Phase 4: Single Ballot Mode and Tie Ladder (Spec 0004)  
+**Files Changed / Created:**
+* `voting-server/src/ballot.js` (Created: Pure functional single ballot module for sessions with 2 to 6 candidates)
+* `voting-server/src/roundManager.js` (Enhanced: Orchestrates tie ladder, zero vote replays, TIE_PENDING lifecycle, and coin flip fallback)
+* `voting-server/src/timer.js` (Enhanced: Integrated 30 second tie pending timer with automatic coin flip expiration)
+* `voting-server/src/reducer.js` (Enhanced: Added START_RUNOFF, TIE_PENDING, RESOLVE_TIE, and TERMINATE_NO_RESULT actions)
+* `voting-server/src/server.js` (Enhanced: Added RESOLVE_TIE admin ingress authorization, tie_pending socket broadcast, and round resolution snapshots)
+* `voting-server/src/constants.js` (Enhanced: Exported SINGLE_BALLOT_MAX threshold)
+* `voting-client/src/constants.js` (Enhanced: Mirrored SINGLE_BALLOT_MAX threshold)
+* `voting-client/src/redux/voteSlice.js` (Enhanced: Hydrated votingMode, tiePending, and multi candidate ballot vote shapes)
+* `voting-client/src/pages/Voting.jsx` (Enhanced: Rendered responsive multi candidate ballot grid for single ballot sessions)
+* `voting-client/src/pages/Admin.jsx` (Enhanced: Rendered admin tie resolution panel with 30 second countdown, Pick Winner, and Coin Flip controls)
+* `voting-client/src/components/results/RoundTimeline.jsx` (Enhanced: Rendered round resolution badges for runoff, admin pick, coin flip, and zero vote replay)
+* `voting-server/test/single_ballot_and_tie_ladder_spec.js` (Created: Comprehensive automated test suite covering AC-1 through AC-10)
+* `voting-client/test/single_ballot_tie_ladder_client_spec.js` (Created: Client test suite validating multi candidate grid and tie actions)
+* `docs/specs/0004-single-ballot-and-tie-ladder.md` (Created: Architecture specification)
+* `docs/reviews/2026-09-26-develop1-single-ballot-tie-ladder.md` (Created: Fresh model code review report)
+
+**Major Architectural Changes:**
+1. **Isolated Pure Single Ballot Module (`ballot.js`)**:
+   * Sessions with 2 to 6 candidates run single ballot plurality voting via `ballot.js`.
+   * Preserved pure tournament engine `voting-server/src/core.js` byte for byte identical (pinned SHA-256 hash intact).
+2. **Authoritative Tie Ladder**:
+   * First tie triggers an immediate automatic rematch (pairwise mode) or runoff round with only tied contenders (single ballot mode).
+   * Second consecutive tie enters `TIE_PENDING` lifecycle state with a 30 second countdown.
+   * Admin can pick the winner or trigger a coin flip via authenticated `RESOLVE_TIE` socket action.
+   * If admin does not respond within 30 seconds, server executes an automatic coin flip among tied candidates.
+3. **Graceful Zero Vote Handling**:
+   * Rounds concluding with zero votes replay once with a fresh timer (`zero_vote_replay`).
+   * Second consecutive zero vote round terminates the session cleanly with winner set to null (`no_result`).
+4. **Full Resolution Tracking**:
+   * Every round snapshot in memory and MongoDB `Result.rounds[]` records the resolution method (`majority_win`, `tie_advance`, `runoff`, `admin_pick`, `coin_flip`, `zero_vote_replay`, `no_result`).
+5. **Presentation and Admin Controls**:
+   * Single ballot voting renders all contenders simultaneously on a grid instead of a pairwise card.
+   * Admin interface surfaces a tie resolution alert panel with active countdown.
+   * Round history timeline displays color badges identifying how each round was settled.
+
+**Verification and Quality Audit:**
+* **Backend Automated Tests:** 36 spec files passing with zero regressions.
+* **Frontend Automated Tests:** 21 spec files passing with zero regressions.
+* **Core Checksum Verification:** Exact SHA-256 match for `voting-server/src/core.js`.
+* **Code Review:** Completed in `docs/reviews/2026-09-26-develop1-single-ballot-tie-ladder.md`.
+
+**Result:** Feature 5 (Single ballot mode and tie ladder) is 100% complete, verified, and documented.
+
+
 
 

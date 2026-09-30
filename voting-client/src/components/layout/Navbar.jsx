@@ -1,15 +1,23 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { isAdminLoggedIn, logoutAdmin, getAdminUser } from "../../services/auth";
+import { useSelector, useDispatch } from "react-redux";
+import { isAdminLoggedIn, logoutAdmin, getAdminUser, logoutVoter } from "../../services/auth";
+import { selectCurrentVoter, selectIsVoterLoggedIn, clearVoterAuth } from "../../redux/voterAuthSlice";
+import { LogOut, User, Shield } from "lucide-react";
 import "./Navbar.css";
 
 function Navbar() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+
   const [isAdmin, setIsAdmin] = useState(() => isAdminLoggedIn());
   const [adminUser, setAdminUser] = useState(() => getAdminUser());
 
+  const currentVoter = useSelector(selectCurrentVoter);
+  const isVoterLoggedIn = useSelector(selectIsVoterLoggedIn);
+
   useEffect(() => {
-    // Sync on window storage event
+    // Sync on window storage event for admin
     const handleStorage = () => {
       setIsAdmin(isAdminLoggedIn());
       setAdminUser(getAdminUser());
@@ -18,11 +26,17 @@ function Navbar() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  const handleLogout = () => {
+  const handleAdminLogout = () => {
     logoutAdmin();
     setIsAdmin(false);
     setAdminUser(null);
     navigate("/login");
+  };
+
+  const handleVoterLogout = async () => {
+    await logoutVoter();
+    dispatch(clearVoterAuth());
+    navigate("/");
   };
 
   return (
@@ -35,7 +49,7 @@ function Navbar() {
 
       <nav className="nav-links">
         <Link to="/">Home</Link>
-        <Link to="/sessions">Sessions</Link>
+        <Link to="/join">Join</Link>
         <Link to="/history">History</Link>
         {isAdmin && <Link to="/admin">Admin</Link>}
       </nav>
@@ -50,25 +64,64 @@ function Navbar() {
                 background: "rgba(99, 102, 241, 0.15)",
                 padding: "0.25rem 0.6rem",
                 borderRadius: "9999px",
-                fontWeight: 600
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.3rem"
               }}
             >
-              Admin: {adminUser?.username || "admin"}
+              <Shield size={14} /> Admin: {adminUser?.username || "admin"}
             </span>
             <button
-              onClick={handleLogout}
+              onClick={handleAdminLogout}
               className="login-btn"
               style={{ background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.4)" }}
             >
               Logout
             </button>
           </>
-        ) : (
-          <Link to="/login">
-            <button className="login-btn">
-              Login
+        ) : isVoterLoggedIn ? (
+          <>
+            <span
+              style={{
+                fontSize: "0.85rem",
+                color: "#38bdf8",
+                background: "rgba(56, 189, 248, 0.12)",
+                padding: "0.3rem 0.75rem",
+                borderRadius: "9999px",
+                fontWeight: 500,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.35rem"
+              }}
+            >
+              <User size={14} /> Hi, {currentVoter?.name || currentVoter?.username || "Voter"}
+            </span>
+            <button
+              onClick={handleVoterLogout}
+              className="login-btn"
+              data-testid="logout-btn"
+              style={{
+                background: "rgba(239, 68, 68, 0.15)",
+                color: "#fca5a5",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                cursor: "pointer"
+              }}
+            >
+              <LogOut size={14} /> Log out
             </button>
-          </Link>
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Link to="/login" style={{ textDecoration: "none" }}>
+              <button className="login-btn">
+                Sign in
+              </button>
+            </Link>
+          </div>
         )}
       </div>
     </header>

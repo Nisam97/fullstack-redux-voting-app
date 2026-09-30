@@ -10,6 +10,7 @@ import {
   getAdminProfile,
   clearAdmin,
   verifyAdminCredentials,
+  clearAttemptThrottle,
   generateAdminToken,
   verifyAdminToken
 } from '../src/auth/admin';
@@ -23,14 +24,15 @@ import {
 } from '../src/auth/voter';
 import { configureAuth, resetAuthConfig } from '../src/auth/config';
 
-describe('Feature 1: Two-Tier Authentication', () => {
+describe('Feature 1: Two-Tier Authentication', function() {
+  this.timeout(5000);
   describe('Admin Account & Password Hashing', () => {
     beforeEach(() => {
       clearAdmin();
       resetAuthConfig();
     });
 
-    it('1. hashes admin password using bcrypt and never stores plaintext password', () => {
+    it('1. hashes admin password using bcrypt and never stores plaintext password', async () => {
       const profile = seedAdmin({
         username: 'test_admin',
         email: 'test_admin@votesphere.local',
@@ -44,11 +46,11 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(profile).to.not.have.property('passwordHash');
 
       // Attempting to verify credentials succeeds with correct plaintext
-      const valid = verifyAdminCredentials('test_admin', 'SuperSecretPassword123!');
+      const valid = await verifyAdminCredentials('test_admin', 'SuperSecretPassword123!');
       expect(valid.valid).to.be.true;
     });
 
-    it('2. re-seeding updates the single admin without creating multiple accounts', () => {
+    it('2. re-seeding updates the single admin without creating multiple accounts', async () => {
       seedAdmin({
         username: 'initial_admin',
         email: 'initial@votesphere.local',
@@ -61,10 +63,10 @@ describe('Feature 1: Two-Tier Authentication', () => {
         password: 'Password2!'
       });
 
-      const oldCheck = verifyAdminCredentials('initial_admin', 'Password1!');
+      const oldCheck = await verifyAdminCredentials('initial_admin', 'Password1!');
       expect(oldCheck.valid).to.be.false;
 
-      const newCheck = verifyAdminCredentials('updated_admin', 'Password2!');
+      const newCheck = await verifyAdminCredentials('updated_admin', 'Password2!');
       expect(newCheck.valid).to.be.true;
     });
   });
@@ -80,30 +82,30 @@ describe('Feature 1: Two-Tier Authentication', () => {
       });
     });
 
-    it('3. valid login succeeds with username or email', () => {
-      const byUser = verifyAdminCredentials('admin', 'ValidPassword123!');
+    it('3. valid login succeeds with username or email', async () => {
+      const byUser = await verifyAdminCredentials('admin', 'ValidPassword123!');
       expect(byUser.valid).to.be.true;
       expect(byUser.admin.username).to.equal('admin');
 
-      const byEmail = verifyAdminCredentials('admin@votesphere.local', 'ValidPassword123!');
+      const byEmail = await verifyAdminCredentials('admin@votesphere.local', 'ValidPassword123!');
       expect(byEmail.valid).to.be.true;
       expect(byEmail.admin.email).to.equal('admin@votesphere.local');
     });
 
-    it('4. invalid password fails with generic machine-readable error', () => {
-      const result = verifyAdminCredentials('admin', 'WrongPassword!');
+    it('4. invalid password fails with generic machine-readable error', async () => {
+      const result = await verifyAdminCredentials('admin', 'WrongPassword!');
       expect(result.valid).to.be.false;
       expect(result.error).to.equal('INVALID_CREDENTIALS');
     });
 
-    it('5. invalid username or email fails with generic machine-readable error', () => {
-      const result = verifyAdminCredentials('nonexistent_user', 'ValidPassword123!');
+    it('5. invalid username or email fails with generic machine-readable error', async () => {
+      const result = await verifyAdminCredentials('nonexistent_user', 'ValidPassword123!');
       expect(result.valid).to.be.false;
       expect(result.error).to.equal('INVALID_CREDENTIALS');
     });
 
-    it('6. valid JWT verifies correctly and contains role and identity without sensitive fields', () => {
-      const auth = verifyAdminCredentials('admin', 'ValidPassword123!');
+    it('6. valid JWT verifies correctly and contains role and identity without sensitive fields', async () => {
+      const auth = await verifyAdminCredentials('admin', 'ValidPassword123!');
       const token = generateAdminToken(auth.admin);
 
       expect(token).to.be.a('string');
@@ -128,8 +130,8 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(nil.error).to.equal('UNAUTHORIZED');
     });
 
-    it('8. expired JWT fails verification', () => {
-      const auth = verifyAdminCredentials('admin', 'ValidPassword123!');
+    it('8. expired JWT fails verification', async () => {
+      const auth = await verifyAdminCredentials('admin', 'ValidPassword123!');
       const expiredToken = generateAdminToken(auth.admin, { expiresIn: '-1s' });
 
       const verified = verifyAdminToken(expiredToken);
@@ -138,8 +140,8 @@ describe('Feature 1: Two-Tier Authentication', () => {
       expect(verified.message).to.include('expired');
     });
 
-    it('9. tampered JWT fails verification', () => {
-      const auth = verifyAdminCredentials('admin', 'ValidPassword123!');
+    it('9. tampered JWT fails verification', async () => {
+      const auth = await verifyAdminCredentials('admin', 'ValidPassword123!');
       const token = generateAdminToken(auth.admin);
       const tamperedToken = token.slice(0, -4) + 'abcd';
 
@@ -373,9 +375,11 @@ describe('Feature 1: Two-Tier Authentication', () => {
       return socket;
     }
 
-    beforeEach((done) => {
+    beforeEach(async function() {
+      this.timeout(5000);
       clearAdmin();
       clearVoters();
+      clearAttemptThrottle();
       resetAuthConfig();
       seedAdmin({
         username: 'admin',
@@ -383,7 +387,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
         password: 'Password123!'
       });
 
-      const auth = verifyAdminCredentials('admin', 'Password123!');
+      const auth = await verifyAdminCredentials('admin', 'Password123!');
       adminToken = generateAdminToken(auth.admin);
 
       store = makeStore();
@@ -400,7 +404,6 @@ describe('Feature 1: Two-Tier Authentication', () => {
 
       io = startServer(store, 0);
       port = io.httpServer.address().port;
-      done();
     });
 
     afterEach((done) => {
@@ -580,6 +583,7 @@ describe('Feature 1: Two-Tier Authentication', () => {
     beforeEach((done) => {
       clearAdmin();
       clearVoters();
+      clearAttemptThrottle();
       resetAuthConfig();
       seedAdmin({
         username: 'admin',

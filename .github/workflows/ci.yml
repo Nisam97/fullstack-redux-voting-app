@@ -1,0 +1,60 @@
+name: VoteSphere CI
+
+on:
+  push:
+    branches: [ develop1, main, master ]
+  pull_request:
+    branches: [ develop1, main, master ]
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'voting-server/package-lock.json'
+
+      - name: Install Backend Dependencies
+        working-directory: ./voting-server
+        run: npm ci
+
+      - name: Run Backend Tests
+        working-directory: ./voting-server
+        run: npm test
+
+  frontend-test:
+    name: Frontend Lint, Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'voting-client/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./voting-client
+        run: npm install
+
+      - name: Run ESLint
+        working-directory: ./voting-client
+        run: npm run lint
+
+      - name: Run Frontend Tests
+        working-directory: ./voting-client
+        run: npm test
+
+      - name: Build Production Bundle
+        working-directory: ./voting-client
+        run: npm run build

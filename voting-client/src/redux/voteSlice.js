@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { deriveTotals } from '../components/results/resultsUtils.js';
 
 /**
  * Normalized initial state for multi-session management
@@ -27,6 +28,17 @@ export const START_SESSION = 'START_SESSION';
 export const ARCHIVE_SESSION = 'ARCHIVE_SESSION';
 export const TIMER_STATE = 'timer_state';
 export const SET_TIMER_STATE = 'SET_TIMER_STATE';
+export const APPEND_ROUND_RESULT = 'APPEND_ROUND_RESULT';
+export const RESOLVE_TIE = 'RESOLVE_TIE';
+export const SET_TIE_PENDING = 'SET_TIE_PENDING';
+export const TIE_PENDING = 'tie_pending';
+export const PRESENCE_UPDATE = 'presence_update';
+export const SET_PRESENCE_UPDATE = 'SET_PRESENCE_UPDATE';
+export const SET_ALLOWLIST = 'SET_ALLOWLIST';
+export const APPROVE_PARTICIPANT = 'APPROVE_PARTICIPANT';
+export const REJECT_PARTICIPANT = 'REJECT_PARTICIPANT';
+export const REMOVE_PARTICIPANT = 'REMOVE_PARTICIPANT';
+export const SET_WHO_CAN_JOIN = 'SET_WHO_CAN_JOIN';
 
 /**
  * Normalizes a session detail object into a consistent shape
@@ -107,13 +119,54 @@ export function normalizeSession(raw = {}, sessionId, existing = {}) {
     ? (raw.revealTimer !== undefined ? raw.revealTimer : null)
     : (raw.revealTimer !== undefined ? raw.revealTimer : (existing.revealTimer || null));
 
-  // Security: Sanitize incoming raw object to ensure voter tokens and credentials never enter Redux
+  const votingMode = raw.votingMode !== undefined
+    ? raw.votingMode
+    : (existing.votingMode !== undefined ? existing.votingMode : 'tournament');
+  const tieCount = raw.tieCount !== undefined
+    ? Number(raw.tieCount)
+    : (existing.tieCount !== undefined ? Number(existing.tieCount) : 0);
+  const zeroVoteCount = raw.zeroVoteCount !== undefined
+    ? Number(raw.zeroVoteCount)
+    : (existing.zeroVoteCount !== undefined ? Number(existing.zeroVoteCount) : 0);
+  const tiePending = (winner || status === 'completed' || status === 'archived')
+    ? null
+    : (raw.tiePending !== undefined
+        ? raw.tiePending
+        : (existing.tiePending !== undefined ? existing.tiePending : null));
+
+  const rounds = (raw.roundLifecycle === 'VOTING' && status !== 'completed')
+    ? []
+    : (Array.isArray(raw.rounds)
+        ? raw.rounds
+        : (raw.rounds !== undefined || raw.roundIndex !== undefined || raw.correctedRound
+            ? []
+            : (Array.isArray(existing.rounds) ? existing.rounds : [])));
+
+  const connectedCount = raw.connectedCount !== undefined
+    ? Number(raw.connectedCount)
+    : (existing.connectedCount !== undefined ? Number(existing.connectedCount) : 0);
+  const totalVoters = raw.totalVoters !== undefined
+    ? Number(raw.totalVoters)
+    : (existing.totalVoters !== undefined ? Number(existing.totalVoters) : voterCount);
+
+  const sessionType = raw.sessionType || raw.type || existing.sessionType || existing.type || 'open';
+  const whoCanJoin = raw.whoCanJoin || existing.whoCanJoin || (sessionType === 'secured' ? 'allowlist' : 'public');
+  const publishResultsPublicly = raw.publishResultsPublicly !== undefined
+    ? Boolean(raw.publishResultsPublicly)
+    : (existing.publishResultsPublicly !== undefined ? Boolean(existing.publishResultsPublicly) : (sessionType !== 'secured'));
+  const participantCounts = raw.participantCounts !== undefined
+    ? raw.participantCounts
+    : (existing.participantCounts !== undefined ? existing.participantCounts : null);
+
+  // Security: Sanitize incoming raw object to ensure voter tokens, credentials, and raw presence structures never enter Redux
   const sanitizedRaw = { ...raw };
   delete sanitizedRaw.voterToken;
   delete sanitizedRaw.token;
   delete sanitizedRaw.jwt;
   delete sanitizedRaw.password;
   delete sanitizedRaw.secret;
+  delete sanitizedRaw.presence;
+  delete sanitizedRaw.snapshots;
 
   return {
     ...existing,
@@ -126,14 +179,26 @@ export function normalizeSession(raw = {}, sessionId, existing = {}) {
     winner,
     createdAt,
     voterCount,
+    connectedCount,
+    totalVoters,
     entryCount,
     isArchived,
     votingStarted,
+    votingMode,
+    sessionType,
+    type: sessionType,
+    whoCanJoin,
+    publishResultsPublicly,
+    participantCounts,
+    tieCount,
+    zeroVoteCount,
+    tiePending,
     roundLifecycle,
     roundId,
     roundIndex,
     finalVote,
     revealTimer,
+    rounds,
     timer: timer || null,
     timerDuration,
     hasLoaded: true
@@ -226,6 +291,9 @@ function handleSetSessions(state, action) {
         voterCount: summary.voterCount !== undefined ? Number(summary.voterCount) : (existing.voterCount || 0),
         entryCount: summary.entryCount !== undefined ? Number(summary.entryCount) : (existing.entryCount || 0),
         timerDuration: summary.timerDuration !== undefined ? Number(summary.timerDuration) : (existing.timerDuration !== undefined ? existing.timerDuration : 30),
+        type: summary.type !== undefined ? summary.type : existing.type,
+        votingMode: summary.votingMode !== undefined ? summary.votingMode : existing.votingMode,
+        joinCode: summary.joinCode !== undefined ? summary.joinCode : existing.joinCode,
         isArchived: summary.isArchived !== undefined ? Boolean(summary.isArchived) : existing.isArchived,
         votingStarted: summary.votingStarted !== undefined ? Boolean(summary.votingStarted) : existing.votingStarted,
         ...(summary.winner !== undefined && summary.winner !== null ? { winner: summary.winner } : {})
@@ -302,80 +370,25 @@ function handleSetActiveSession(state, action) {
 
 /**
  * Reducer handler for client-side VOTE action.
- * Carries sessionId and safely targets bySessionId[sessionId].
+ *
+ * Deliberately a no-op: the server is authoritative, so the client never
+ * tallies votes locally (local math would drift from `core.js` and briefly
+ * show wrong standings under ties). This action is pure intent; the remote
+ * action middleware ships it to the server and the resulting `session_state`
+ * broadcast updates this slice.
  */
-function handleVote(state, action) {
-  const sessionId = action.sessionId || state.activeSessionId;
-  const entry = action.entry;
-
-  if (!sessionId || !entry || typeof entry !== 'string' || !state.bySessionId || !state.bySessionId[sessionId]) {
-    return state;
-  }
-
-  const session = state.bySessionId[sessionId];
-  if (!session.vote || !Array.isArray(session.vote.pair) || !session.vote.pair.includes(entry)) {
-    return state;
-  }
-
-  const currentTally = session.vote.tally ? { ...session.vote.tally } : {};
-  currentTally[entry] = (currentTally[entry] || 0) + 1;
-
-  state.bySessionId[sessionId] = {
-    ...session,
-    vote: {
-      ...session.vote,
-      tally: currentTally
-    }
-  };
-
+function handleVote(state) {
   return state;
 }
 
 /**
  * Reducer handler for NEXT action.
- * Carries sessionId and safely advances bySessionId[sessionId].
+ *
+ * Deliberately a no-op: only the server computes winners and round
+ * advancement. This action is pure intent; the resulting `session_state`
+ * broadcast updates this slice.
  */
-function handleNext(state, action) {
-  const sessionId = action.sessionId || state.activeSessionId;
-  if (!sessionId || !state.bySessionId || !state.bySessionId[sessionId]) {
-    return state;
-  }
-
-  const session = state.bySessionId[sessionId];
-  const entries = Array.isArray(session.entries) ? [...session.entries] : [];
-  const currentVote = session.vote;
-
-  let winners = [];
-  if (currentVote && Array.isArray(currentVote.pair) && currentVote.pair.length >= 2) {
-    const [a, b] = currentVote.pair;
-    const tally = currentVote.tally || {};
-    const aVotes = tally[a] || 0;
-    const bVotes = tally[b] || 0;
-    if (aVotes > bVotes) winners = [a];
-    else if (aVotes < bVotes) winners = [b];
-    else winners = [a, b];
-  }
-
-  const combined = entries.concat(winners);
-  if (combined.length === 1) {
-    state.bySessionId[sessionId] = {
-      ...session,
-      vote: null,
-      entries: [],
-      winner: combined[0],
-      status: 'completed'
-    };
-  } else if (combined.length >= 2) {
-    state.bySessionId[sessionId] = {
-      ...session,
-      vote: {
-        pair: combined.slice(0, 2),
-        tally: {}
-      },
-      entries: combined.slice(2)
-    };
-  }
-
+function handleNext(state) {
   return state;
 }
 
@@ -451,6 +464,9 @@ function handleLobbyUpdate(state, action) {
   const voterCount = incoming.voterCount !== undefined
     ? Number(incoming.voterCount)
     : (existing.voterCount !== undefined ? existing.voterCount : 0);
+  const connectedCount = incoming.connectedCount !== undefined
+    ? Number(incoming.connectedCount)
+    : (existing.connectedCount !== undefined ? existing.connectedCount : (existing.voterCount !== undefined ? existing.voterCount : 0));
   const entryCount = incoming.entryCount !== undefined
     ? Number(incoming.entryCount)
     : (existing.entryCount !== undefined ? existing.entryCount : 0);
@@ -469,6 +485,7 @@ function handleLobbyUpdate(state, action) {
     title,
     status,
     voterCount,
+    connectedCount,
     entryCount,
     isArchived,
     votingStarted,
@@ -487,9 +504,68 @@ function handleLobbyUpdate(state, action) {
         title: title || state.list[idx].title,
         status: status || state.list[idx].status,
         voterCount,
+        connectedCount,
         entryCount: incoming.entryCount !== undefined ? entryCount : state.list[idx].entryCount,
         isArchived,
         votingStarted
+      };
+    }
+  }
+
+  return state;
+}
+
+/**
+ * Reducer handler for room scoped presence updates (presence_update / SET_PRESENCE_UPDATE).
+ * Updates live connected count and total voters strictly under bySessionId[sessionId].
+ */
+function handlePresenceUpdate(state, action) {
+  const incoming = action.payload !== undefined
+    ? action.payload
+    : (action.data || action);
+
+  if (!incoming || typeof incoming !== 'object') {
+    return state;
+  }
+
+  const sessionId = action.sessionId || incoming.sessionId || incoming.id;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return state;
+  }
+
+  const cleanSessionId = sessionId.trim();
+
+  if (!state.bySessionId) {
+    state.bySessionId = {};
+  }
+
+  const existing = state.bySessionId[cleanSessionId] || {};
+  const connectedCount = incoming.connectedCount !== undefined
+    ? Number(incoming.connectedCount)
+    : (existing.connectedCount !== undefined ? existing.connectedCount : 0);
+  const totalVoters = incoming.totalVoters !== undefined
+    ? Number(incoming.totalVoters)
+    : (existing.totalVoters !== undefined ? existing.totalVoters : (existing.voterCount !== undefined ? existing.voterCount : 0));
+
+  state.bySessionId[cleanSessionId] = {
+    ...existing,
+    id: cleanSessionId,
+    connectedCount,
+    totalVoters,
+    voterCount: totalVoters
+  };
+
+  if (Array.isArray(state.list)) {
+    const idx = state.list.findIndex(
+      (item) => item && (item.id === cleanSessionId || item.sessionId === cleanSessionId)
+    );
+    if (idx !== -1) {
+      state.list[idx] = {
+        ...state.list[idx],
+        id: cleanSessionId,
+        connectedCount,
+        totalVoters,
+        voterCount: totalVoters
       };
     }
   }
@@ -567,6 +643,17 @@ function handleArchiveSession(state, action) {
   return state;
 }
 
+function handleSetWhoCanJoin(state, action) {
+  const sessionId = action.sessionId || action.id;
+  if (!sessionId || !state.bySessionId || !state.bySessionId[sessionId]) return state;
+  const session = state.bySessionId[sessionId];
+  state.bySessionId[sessionId] = {
+    ...session,
+    whoCanJoin: action.whoCanJoin
+  };
+  return state;
+}
+
 /**
  * Reducer handler for session timer state updates (`timer_state` / `SET_TIMER_STATE`).
  * Updates or clears `timer` strictly under `bySessionId[sessionId]`.
@@ -595,6 +682,7 @@ function handleTimerState(state, action) {
       ...existing,
       roundLifecycle: existing.roundLifecycle === 'VOTING' ? 'RESULTS_REVEALED' : (existing.roundLifecycle || 'RESULTS_REVEALED'),
       timer: null,
+      tiePending: null,
       revealTimer: {
         duration: typeof incoming.duration === 'number' ? incoming.duration : Number(incoming.duration) || null,
         expiresAt: typeof incoming.expiresAt === 'number' ? incoming.expiresAt : Number(incoming.expiresAt) || null,
@@ -603,11 +691,25 @@ function handleTimerState(state, action) {
         roundId: incoming.roundId || existing.roundId || null
       }
     };
+  } else if (status === 'tie_pending') {
+    state.bySessionId[cleanId] = {
+      ...existing,
+      roundLifecycle: 'TIE_PENDING',
+      timer: null,
+      revealTimer: null,
+      tiePending: {
+        candidates: incoming.candidates || existing.tiePending?.candidates || [],
+        duration: typeof incoming.duration === 'number' ? incoming.duration : Number(incoming.duration) || 30,
+        expiresAt: typeof incoming.expiresAt === 'number' ? incoming.expiresAt : Number(incoming.expiresAt) || (Date.now() + 30000),
+        roundId: incoming.roundId || existing.roundId || null
+      }
+    };
   } else if (status === 'running') {
     state.bySessionId[cleanId] = {
       ...existing,
       roundLifecycle: 'VOTING',
       revealTimer: null,
+      tiePending: null,
       timer: {
         duration: typeof incoming.duration === 'number' ? incoming.duration : Number(incoming.duration) || null,
         expiresAt: typeof incoming.expiresAt === 'number' ? incoming.expiresAt : Number(incoming.expiresAt) || null,
@@ -626,6 +728,111 @@ function handleTimerState(state, action) {
   return state;
 }
 
+/**
+ * Reducer handler for SET_TIE_PENDING and tie_pending events.
+ * Updates roundLifecycle to TIE_PENDING and stores tiePending parameters.
+ */
+function handleSetTiePending(state, action) {
+  const incoming = action.payload !== undefined ? action.payload : action;
+  if (!incoming || typeof incoming !== 'object') {
+    return state;
+  }
+  const sessionId = action.sessionId || incoming.sessionId || incoming.id;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return state;
+  }
+  const cleanId = sessionId.trim();
+  if (!state.bySessionId) {
+    state.bySessionId = {};
+  }
+  const existing = state.bySessionId[cleanId] || normalizeSession({ id: cleanId }, cleanId);
+  state.bySessionId[cleanId] = {
+    ...existing,
+    roundLifecycle: 'TIE_PENDING',
+    timer: null,
+    revealTimer: null,
+    tiePending: {
+      candidates: incoming.candidates || incoming.tiePending?.candidates || existing.vote?.candidates || existing.vote?.pair || [],
+      expiresAt: typeof incoming.expiresAt === 'number' ? incoming.expiresAt : Number(incoming.expiresAt) || (Date.now() + 30000),
+      duration: typeof incoming.duration === 'number' ? incoming.duration : Number(incoming.duration) || 30,
+      roundId: incoming.roundId || existing.roundId || null
+    }
+  };
+  return state;
+}
+
+/**
+ * Reducer handler for RESOLVE_TIE.
+ * Pure intent remote action dispatched to authoritative server.
+ */
+function handleResolveTie(state) {
+  return state;
+}
+
+/**
+ * Reducer handler for CORRECT_ROUND_RESULT action (spec 0003 advanced fix).
+ * Replaces the advanced field of an already stored round snapshot after the
+ * server corrected it post NEXT. Mirrors the server's CORRECT_ROUND_RESULT
+ * reducer: same roundIndex lookup, same advanced-only replacement.
+ */
+function handleCorrectRoundResult(state, action) {
+  const incoming = action.payload !== undefined ? action.payload : action;
+  if (!incoming || typeof incoming !== 'object') {
+    return state;
+  }
+  const sessionId = action.sessionId || incoming.sessionId || incoming.id;
+  const round = action.round || incoming.round;
+  const roundIndex = action.roundIndex !== undefined ? action.roundIndex : incoming.roundIndex;
+  if (!sessionId || !round || typeof round !== 'object' || roundIndex === undefined) {
+    return state;
+  }
+  const cleanId = sessionId.trim();
+  const existing = state.bySessionId[cleanId];
+  if (!existing || !Array.isArray(existing.rounds)) {
+    return state;
+  }
+  const idx = existing.rounds.findIndex(r => r && r.roundIndex === roundIndex);
+  if (idx === -1) {
+    return state;
+  }
+  const correctedRounds = existing.rounds.slice();
+  correctedRounds[idx] = { ...correctedRounds[idx], advanced: round.advanced === undefined ? null : round.advanced };
+  state.bySessionId[cleanId] = {
+    ...existing,
+    rounds: correctedRounds
+  };
+  return state;
+}
+
+/**
+ * Reducer handler for APPEND_ROUND_RESULT action (AC-1, AC-4).
+ * Appends frozen round result to session's rounds list, guarded by roundIndex idempotency.
+ */
+function handleAppendRoundResult(state, action) {
+  const incoming = action.payload !== undefined ? action.payload : action;
+  if (!incoming || typeof incoming !== 'object') {
+    return state;
+  }
+  const sessionId = action.sessionId || incoming.sessionId || incoming.id;
+  const round = action.round || incoming.round || action.roundSnapshot || incoming.roundSnapshot;
+  if (!sessionId || !round || typeof round !== 'object') {
+    return state;
+  }
+  const cleanId = sessionId.trim();
+  if (!state.bySessionId) {
+    state.bySessionId = {};
+  }
+  const existing = state.bySessionId[cleanId] || normalizeSession({ id: cleanId }, cleanId);
+  const existingRounds = Array.isArray(existing.rounds) ? existing.rounds : [];
+  if (!existingRounds.some(r => r.roundIndex === round.roundIndex)) {
+    state.bySessionId[cleanId] = {
+      ...existing,
+      rounds: [...existingRounds, round]
+    };
+  }
+  return state;
+}
+
 export const voteSlice = createSlice({
   name: 'sessions',
   initialState,
@@ -640,6 +847,9 @@ export const voteSlice = createSlice({
     archiveSessionAction: handleArchiveSession,
     timerState: handleTimerState,
     setTimerState: handleTimerState,
+    appendRoundResult: handleAppendRoundResult,
+    setTiePendingAction: handleSetTiePending,
+    resolveTieAction: handleResolveTie,
     // Aliases
     setElections: handleSetSessions,
     setElectionState: handleSetSessionState,
@@ -659,11 +869,19 @@ export const voteSlice = createSlice({
       .addCase(SET_ACTIVE_SESSION, handleSetActiveSession)
       .addCase(LOBBY_UPDATE, handleLobbyUpdate)
       .addCase(SET_LOBBY_UPDATE, handleLobbyUpdate)
+      .addCase(PRESENCE_UPDATE, handlePresenceUpdate)
+      .addCase(SET_PRESENCE_UPDATE, handlePresenceUpdate)
       .addCase(CREATE_SESSION, handleCreateSession)
       .addCase(START_SESSION, handleStartSession)
       .addCase(ARCHIVE_SESSION, handleArchiveSession)
       .addCase(TIMER_STATE, handleTimerState)
       .addCase(SET_TIMER_STATE, handleTimerState)
+      .addCase(APPEND_ROUND_RESULT, handleAppendRoundResult)
+      .addCase('CORRECT_ROUND_RESULT', handleCorrectRoundResult)
+      .addCase(SET_TIE_PENDING, handleSetTiePending)
+      .addCase(TIE_PENDING, handleSetTiePending)
+      .addCase(RESOLVE_TIE, handleResolveTie)
+      .addCase(SET_WHO_CAN_JOIN, handleSetWhoCanJoin)
       .addCase(VOTE, handleVote)
       .addCase(NEXT, handleNext)
       .addCase(SET_ENTRIES, handleSetEntries)
@@ -757,6 +975,26 @@ export const lobbyUpdate = (sessionIdOrPayload, maybeData) => {
 
 export const setLobbyUpdate = lobbyUpdate;
 
+export const presenceUpdate = (sessionIdOrPayload, maybePresence) => {
+  if (typeof sessionIdOrPayload === 'string' && maybePresence && typeof maybePresence === 'object') {
+    return {
+      type: PRESENCE_UPDATE,
+      sessionId: sessionIdOrPayload,
+      payload: { ...maybePresence, sessionId: maybePresence.sessionId || sessionIdOrPayload }
+    };
+  }
+
+  const payload = sessionIdOrPayload && typeof sessionIdOrPayload === 'object' ? sessionIdOrPayload : {};
+  const sessionId = payload.sessionId || payload.id;
+  return {
+    type: PRESENCE_UPDATE,
+    sessionId,
+    payload
+  };
+};
+
+export const setPresenceUpdate = presenceUpdate;
+
 export const createSession = (payloadOrId, maybeTitle, maybeEntries, maybeTimerDuration) => {
   if (payloadOrId && typeof payloadOrId === 'object') {
     const sessionId = payloadOrId.sessionId || payloadOrId.id || `sess_${Date.now()}`;
@@ -804,6 +1042,17 @@ export const archiveSession = (sessionIdOrPayload) => {
   };
 };
 
+export const refreshJoinCode = (sessionIdOrPayload) => {
+  const sessionId = sessionIdOrPayload && typeof sessionIdOrPayload === 'object'
+    ? (sessionIdOrPayload.sessionId || sessionIdOrPayload.id)
+    : sessionIdOrPayload;
+  return {
+    type: 'REFRESH_JOIN_CODE',
+    sessionId,
+    meta: { remote: true }
+  };
+};
+
 export const vote = (sessionIdOrPayload, maybeEntry) => {
   if (typeof sessionIdOrPayload === 'object' && sessionIdOrPayload !== null) {
     const sessionId = sessionIdOrPayload.sessionId || sessionIdOrPayload.electionId;
@@ -839,6 +1088,49 @@ export const next = (sessionIdOrPayload) => {
     type: NEXT,
     sessionId,
     meta: { remote: true }
+  };
+};
+
+export const setTiePending = (sessionIdOrPayload, maybeTieData) => {
+  if (typeof sessionIdOrPayload === 'string') {
+    const payload = maybeTieData && typeof maybeTieData === 'object' ? maybeTieData : {};
+    return {
+      type: SET_TIE_PENDING,
+      sessionId: sessionIdOrPayload,
+      payload: { ...payload, sessionId: sessionIdOrPayload }
+    };
+  }
+  const payload = sessionIdOrPayload && typeof sessionIdOrPayload === 'object' ? sessionIdOrPayload : {};
+  const sessionId = payload.sessionId || payload.id;
+  return {
+    type: SET_TIE_PENDING,
+    sessionId,
+    payload
+  };
+};
+
+export const resolveTie = (sessionIdOrPayload, maybeRoundId, maybeChoice, maybeWinner, maybeToken) => {
+  if (sessionIdOrPayload && typeof sessionIdOrPayload === 'object') {
+    const sessionId = sessionIdOrPayload.sessionId || sessionIdOrPayload.id;
+    const token = sessionIdOrPayload.token || sessionIdOrPayload.meta?.token;
+    return {
+      type: RESOLVE_TIE,
+      sessionId,
+      roundId: sessionIdOrPayload.roundId,
+      choice: sessionIdOrPayload.choice,
+      winner: sessionIdOrPayload.winner,
+      ...(token ? { token } : {}),
+      meta: { remote: true, ...(token ? { token } : {}), ...(sessionIdOrPayload.meta || {}) }
+    };
+  }
+  return {
+    type: RESOLVE_TIE,
+    sessionId: sessionIdOrPayload,
+    roundId: maybeRoundId,
+    choice: maybeChoice,
+    winner: maybeWinner,
+    ...(maybeToken ? { token: maybeToken } : {}),
+    meta: { remote: true, ...(maybeToken ? { token: maybeToken } : {}) }
   };
 };
 
@@ -892,6 +1184,9 @@ export function getSessionsState(state) {
   if (!state) return initialState;
   if (state.sessions && typeof state.sessions === 'object' && ('bySessionId' in state.sessions || 'list' in state.sessions)) {
     return state.sessions;
+  }
+  if (state.vote && typeof state.vote === 'object' && ('bySessionId' in state.vote || 'list' in state.vote)) {
+    return state.vote;
   }
   return state;
 }
@@ -1093,6 +1388,125 @@ export const selectRevealTimer = (state, sessionId) => {
 
 export const selectIsRevealActive = (state, sessionId) => {
   return selectRoundLifecycle(state, sessionId) === 'RESULTS_REVEALED';
+};
+
+export const selectSessionRounds = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && Array.isArray(session.rounds) ? session.rounds : [];
+};
+
+export const selectRoundTotals = (state, sessionId) => {
+  const rounds = selectSessionRounds(state, sessionId);
+  return deriveTotals(rounds);
+};
+
+export const appendRoundResult = (sessionIdOrPayload, maybeRound) => {
+  if (typeof sessionIdOrPayload === 'string') {
+    return {
+      type: APPEND_ROUND_RESULT,
+      sessionId: sessionIdOrPayload,
+      round: maybeRound,
+      payload: { sessionId: sessionIdOrPayload, round: maybeRound }
+    };
+  }
+  const payload = sessionIdOrPayload && typeof sessionIdOrPayload === 'object' ? sessionIdOrPayload : {};
+  const sessionId = payload.sessionId || payload.id;
+  const round = payload.round || payload.roundSnapshot || maybeRound;
+  return {
+    type: APPEND_ROUND_RESULT,
+    sessionId,
+    round,
+    payload: { ...payload, sessionId, round }
+  };
+};
+
+export const selectVotingMode = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && session.votingMode ? session.votingMode : 'tournament';
+};
+
+export const selectTiePending = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && session.tiePending ? session.tiePending : null;
+};
+
+export const selectIsTiePending = (state, sessionId) => {
+  return selectRoundLifecycle(state, sessionId) === 'TIE_PENDING';
+};
+
+export const selectCandidates = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  if (!session || !session.vote) return [];
+  if (Array.isArray(session.vote.candidates)) return session.vote.candidates;
+  if (Array.isArray(session.vote.pair)) return session.vote.pair;
+  return [];
+};
+
+export const selectConnectedCount = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && typeof session.connectedCount === 'number' ? session.connectedCount : 0;
+};
+
+export const selectTotalVoters = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  if (session && typeof session.totalVoters === 'number') {
+    return session.totalVoters;
+  }
+  return selectVoterCount(state, targetId);
+};
+
+export const setAllowlist = (sessionId, emails) => ({
+  type: SET_ALLOWLIST,
+  sessionId,
+  emails
+});
+
+export const approveParticipant = (sessionId, requestId) => ({
+  type: APPROVE_PARTICIPANT,
+  sessionId,
+  requestId
+});
+
+export const rejectParticipant = (sessionId, requestId) => ({
+  type: REJECT_PARTICIPANT,
+  sessionId,
+  requestId
+});
+
+export const removeParticipant = (sessionId, voterToken) => ({
+  type: REMOVE_PARTICIPANT,
+  sessionId,
+  voterToken
+});
+
+export const setWhoCanJoin = (sessionId, whoCanJoin) => ({
+  type: SET_WHO_CAN_JOIN,
+  sessionId,
+  whoCanJoin
+});
+
+export const selectSessionType = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && session.type ? session.type : 'open';
+};
+
+export const selectWhoCanJoin = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && session.whoCanJoin ? session.whoCanJoin : 'public';
+};
+
+export const selectParticipantCounts = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && session.participantCounts ? session.participantCounts : null;
 };
 
 export default voteSlice.reducer;

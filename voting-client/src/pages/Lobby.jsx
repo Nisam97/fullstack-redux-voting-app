@@ -26,13 +26,16 @@ import {
 import {
   subscribeSession,
   unsubscribeSession,
-  SERVER_URL
+  SERVER_URL,
+  socket
 } from "../services/socket";
 import {
   hasJoinedSession,
   getVoterDisplayName,
-  joinVoterSession
+  joinVoterSession,
+  clearVoterSession
 } from "../services/auth";
+import { selectCurrentVoter, selectIsVoterLoggedIn } from "../redux/voterAuthSlice";
 import "./Lobby.css";
 
 /**
@@ -60,12 +63,25 @@ function Lobby() {
   const voterCount = useSelector((state) => selectVoterCount(state, routeSessionId));
   const hasLoaded = useSelector((state) => selectHasLoaded(state, routeSessionId));
 
+  const currentVoter = useSelector(selectCurrentVoter);
+  const isVoterLoggedIn = useSelector(selectIsVoterLoggedIn);
+
   // Local component states
   const [fetchError, setFetchError] = useState(null);
   const [isLoading, setIsLoading] = useState(!session);
-  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [displayNameInput, setDisplayNameInput] = useState(() => currentVoter?.name || "");
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState(null);
+  const [isPendingApproval, setIsPendingApproval] = useState(false);
+
+  // Pre-fill display name from voter profile when loaded (AC-12)
+  const [prevVoterName, setPrevVoterName] = useState(currentVoter?.name || null);
+  if (currentVoter?.name && currentVoter.name !== prevVoterName) {
+    setPrevVoterName(currentVoter.name);
+    if (!displayNameInput) {
+      setDisplayNameInput(currentVoter.name);
+    }
+  }
 
   // Local override state for instant reactivity upon successful join
   const [hasJoinedOverride, setHasJoinedOverride] = useState(null);
@@ -79,6 +95,7 @@ function Lobby() {
     setCustomVoterName("");
     setJoinError(null);
     setFetchError(null);
+    setIsPendingApproval(false);
   }
 
   // Voter membership status
@@ -118,7 +135,10 @@ function Lobby() {
               voterCount: data.voterCount,
               entryCount: data.entryCount,
               isArchived: data.isArchived,
-              votingStarted: data.votingStarted
+              votingStarted: data.votingStarted,
+              sessionType: data.sessionType || data.type,
+              type: data.sessionType || data.type,
+              whoCanJoin: data.whoCanJoin
             }));
           }
         }
@@ -148,6 +168,52 @@ function Lobby() {
     ? session.entryCount
     : (Array.isArray(session?.entries) ? session.entries.length : 0);
 
+  const sessionType = session?.sessionType || session?.type || "open";
+  const whoCanJoin = session?.whoCanJoin || (sessionType === "secured" ? "allowlist" : "public");
+  const isSecured = sessionType === "secured";
+
+  // Listen for participant status updates from server (AC-6, AC-8)
+  useEffect(() => {
+    if (!socket || typeof socket.on !== "function") return;
+
+    const handleParticipantStatus = (data) => {
+      if (!data || data.sessionId !== routeSessionId) return;
+
+      if (data.status === "approved" && data.voterToken) {
+        if (typeof window !== "undefined") {
+          const storage = window.sessionStorage || window.localStorage;
+          if (storage) {
+            storage.setItem(`votesphere_voter_token_${routeSessionId}`, data.voterToken);
+            if (data.displayName) {
+              storage.setItem(`votesphere_voter_name_${routeSessionId}`, data.displayName);
+            }
+          }
+        }
+        setHasJoinedOverride(true);
+        setCustomVoterName(data.displayName || displayNameInput);
+        setIsPendingApproval(false);
+        setJoinError(null);
+        subscribeSession(routeSessionId);
+        if (status === "open") {
+          navigate(`/sessions/${routeSessionId}/vote`);
+        }
+      } else if (data.status === "rejected") {
+        setIsPendingApproval(false);
+        setJoinError(data.message || "Your join request was rejected by the organizer.");
+      } else if (data.status === "removed") {
+        clearVoterSession(routeSessionId);
+        setHasJoinedOverride(false);
+        setIsPendingApproval(false);
+        setJoinError(data.message || "You have been removed from this session by the organizer.");
+      }
+    };
+
+    socket.on("participant_status", handleParticipantStatus);
+    return () => {
+      socket.off("participant_status", handleParticipantStatus);
+    };
+  }, [routeSessionId, displayNameInput, status, navigate]);
+
   // Automatic transition: When session becomes open and participant has already joined, navigate to vote
   useEffect(() => {
     if (status === "open" && isJoined && routeSessionId) {
@@ -175,15 +241,34 @@ function Lobby() {
       });
 
       if (!res.success) {
-        setJoinError(res.message || "Failed to join session. Please try again.");
+        if (res.error === "AUTHENTICATION_REQUIRED") {
+          setJoinError("You must sign in with an email account to join this secured session.");
+        } else if (res.error === "NOT_ON_ALLOWLIST") {
+          setJoinError("Your email is not on the approved allowlist for this session.");
+        } else if (res.error === "REQUEST_REJECTED") {
+          setJoinError("Your request to join this session was rejected by the organizer.");
+        } else if (res.error === "PARTICIPANT_REMOVED") {
+          setJoinError("You have been removed from this session by the organizer.");
+        } else {
+          setJoinError(res.message || "Failed to join session. Please try again.");
+        }
+        setIsJoining(false);
+        return;
+      }
+
+      if (res.status === "pending_approval") {
+        setIsPendingApproval(true);
         setIsJoining(false);
         return;
       }
 
       // Success
+      const effectiveName = res.displayName || trimmed;
       setHasJoinedOverride(true);
-      setCustomVoterName(res.displayName || trimmed);
+      setCustomVoterName(effectiveName);
+      setDisplayNameInput(effectiveName);
       setIsJoining(false);
+      subscribeSession(routeSessionId);
 
       // If headcount returned in response, update Redux store immediately
       if (typeof res.voterCount === "number") {
@@ -239,20 +324,32 @@ function Lobby() {
           <article className="lobby-card">
             {/* Header / Session Metadata */}
             <div className="lobby-header">
-              <span
-                className={`lobby-badge ${
-                  isArchived
-                    ? "lobby-badge-archived"
-                    : status === "open"
-                    ? "lobby-badge-open"
-                    : status === "completed"
-                    ? "lobby-badge-completed"
-                    : "lobby-badge-pending"
-                }`}
-              >
-                <span className="lobby-badge-dot" />
-                {isArchived ? "Archived" : status}
-              </span>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span
+                  className={`lobby-badge ${
+                    isArchived
+                      ? "lobby-badge-archived"
+                      : status === "open"
+                      ? "lobby-badge-open"
+                      : status === "completed"
+                      ? "lobby-badge-completed"
+                      : "lobby-badge-pending"
+                  }`}
+                >
+                  <span className="lobby-badge-dot" />
+                  {isArchived ? "Archived" : status}
+                </span>
+
+                {isSecured && (
+                  <span
+                    className="lobby-badge lobby-badge-secured"
+                    title={`Secured session: ${whoCanJoin === "approval" ? "Approval required" : "Allowlist only"}`}
+                  >
+                    <ShieldCheck size={13} style={{ marginRight: 2 }} />
+                    Secured ({whoCanJoin === "approval" ? "Approval" : "Allowlist"})
+                  </span>
+                )}
+              </div>
 
               <div className="lobby-pulse-indicator">
                 <span className="lobby-pulse-circle" />
@@ -286,7 +383,12 @@ function Lobby() {
                 </div>
                 <div className="lobby-headcount-text">
                   <h3>
-                    {voterCount} {voterCount === 1 ? "Participant" : "Participants"} Waiting
+                    {voterCount} {voterCount === 1 ? "Participant" : "Participants"} Registered
+                    {typeof session?.connectedCount === "number" && (
+                      <span style={{ fontSize: "0.85rem", fontWeight: 500, marginLeft: "0.5rem", color: "#38bdf8" }}>
+                        ({session.connectedCount} online)
+                      </span>
+                    )}
                   </h3>
                   <p>Authoritative live headcount updated in real time</p>
                 </div>
@@ -325,15 +427,61 @@ function Lobby() {
                   <ShieldCheck size={16} /> Session-Scoped Pass Active
                 </div>
               </div>
+            ) : isPendingApproval ? (
+              <div className="lobby-status-banner lobby-status-pending" style={{ borderColor: "#38bdf8", background: "rgba(56, 189, 248, 0.08)", marginBottom: "1.5rem" }}>
+                <RefreshCw size={24} className="voting-spinner" style={{ color: "#38bdf8", flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <strong style={{ fontSize: "1rem", color: "#38bdf8" }}>Request Pending Approval</strong>
+                  <p style={{ margin: "0.3rem 0 0 0", fontSize: "0.9rem", color: "#cbd5e1" }}>
+                    Your request to join this secured session has been submitted. Please wait while the organizer reviews and approves your request.
+                  </p>
+                </div>
+              </div>
+            ) : isSecured && !isVoterLoggedIn ? (
+              <section className="lobby-join-section">
+                <h3 className="lobby-join-title">
+                  <LogIn size={20} style={{ color: "#38bdf8" }} />
+                  Secured Voting Session
+                </h3>
+                <div style={{ marginBottom: "1.25rem", padding: "1.25rem", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: "10px" }}>
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <AlertCircle size={22} style={{ color: "#f87171", flexShrink: 0, marginTop: 2 }} />
+                    <div>
+                      <strong style={{ color: "#f87171", fontSize: "0.95rem" }}>Authentication Required</strong>
+                      <p style={{ margin: "0.3rem 0 0.85rem 0", fontSize: "0.88rem", color: "#cbd5e1" }}>
+                        This session is secured with {whoCanJoin === "approval" ? "organizer approval" : "an approved participant allowlist"}. You must sign in with your email account to join.
+                      </p>
+                      <Link
+                        to={`/login?redirect=${encodeURIComponent(`/sessions/${routeSessionId}/lobby`)}`}
+                        className="lobby-action-btn lobby-btn-primary"
+                        style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.5rem 1rem", fontSize: "0.85rem" }}
+                      >
+                        <LogIn size={15} /> Sign In with Email
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </section>
             ) : (
               <section className="lobby-join-section">
                 <h3 className="lobby-join-title">
                   <LogIn size={20} style={{ color: "#38bdf8" }} />
                   Join this Voting Session
                 </h3>
-                <p className="lobby-join-desc">
-                  Enter a display name to participate. No email or password required. You will be automatically admitted to voting once the host starts the tournament.
-                </p>
+                {isVoterLoggedIn ? (
+                  <p className="lobby-join-desc" style={{ color: "#38bdf8" }}>
+                    Signed in as <strong>{currentVoter?.name}</strong> (@{currentVoter?.username}). Your display name is pre filled.
+                  </p>
+                ) : (
+                  <>
+                    <p className="lobby-join-desc">
+                      Enter a display name to participate. No email or password required. You will be automatically admitted to voting once the host starts the tournament.
+                    </p>
+                    <div style={{ marginBottom: "1rem", padding: "0.6rem 0.9rem", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.2)", borderRadius: "8px", fontSize: "0.85rem", color: "#94a3b8" }}>
+                      💡 <strong style={{ color: "#e2e8f0" }}>Sign in for a better experience</strong> — keep your voter identity across sessions and pre fill your display name. <Link to="/login" style={{ color: "#38bdf8", fontWeight: 600 }}>Sign in here</Link>
+                    </div>
+                  </>
+                )}
 
                 {joinError && (
                   <div className="lobby-alert-error" role="alert">

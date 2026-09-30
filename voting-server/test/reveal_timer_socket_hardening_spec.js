@@ -73,6 +73,33 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
     });
   }
 
+  // Polls the authoritative store until the predicate passes. Use this for
+  // state the broadcast guard now hides (the live tally during VOTING).
+  function waitForStoreState(getter, predicate, timeoutMs = 2500, intervalMs = 20) {
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      const tick = () => {
+        let value;
+        try {
+          value = getter();
+        } catch (err) {
+          reject(err);
+          return;
+        }
+        if (predicate(value)) {
+          resolve(value);
+          return;
+        }
+        if (Date.now() - started > timeoutMs) {
+          reject(new Error(`Timed out waiting for store state after ${timeoutMs}ms`));
+          return;
+        }
+        setTimeout(tick, intervalMs);
+      };
+      tick();
+    });
+  }
+
   function waitForTimerState(socket, predicate, timeoutMs = 2500) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -331,10 +358,14 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
         voterToken: vB.voter.sessionToken
       });
 
-      const updatedB = await waitForSessionState(cB, s => s.vote?.tally?.B1 === 1);
-      expect(updatedB.id).to.equal('sess_iso_2');
-      expect(updatedB.roundLifecycle).to.equal('VOTING');
-      expect(updatedB.vote.tally.B1).to.equal(1);
+      // The live tally is hidden from broadcasts during an active round (shared
+      // guard), so the accepted vote is verified in the authoritative store.
+      // The hydration exchange above already proves the room still delivers.
+      await new Promise(r => setTimeout(r, 150));
+      expect(cB.connected).to.be.true;
+      const bSession = store.getState().getIn(['sessions', 'sess_iso_2']);
+      expect(bSession.getIn(['vote', 'tally', 'B1'])).to.equal(1);
+      expect(bSession.get('roundLifecycle')).to.equal('VOTING');
     });
   });
 
@@ -485,6 +516,10 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
     it('9. client reconnecting after reveal expiration hydrates to the new round in VOTING phase', async () => {
       const v = registerVoter({ sessionId: 'sess_reconn', displayName: 'PostUser', store });
       const roundId = roundManager.getCurrentRoundId('sess_reconn', store);
+
+      // Decisive vote first: an empty round is a 0:0 tie and travels the tie
+      // ladder (rematch) instead of advancing the bracket on reveal expiry.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_reconn', entry: 'Item 1' });
 
       roundManager.closeRoundOnce({
         sessionId: 'sess_reconn',
@@ -662,6 +697,10 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
       });
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_dup_exp' });
 
+      // Decisive vote first (the wrapper below drops non NEXT actions); an
+      // empty round is a 0:0 tie and ladders instead of advancing.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_dup_exp', entry: 'M' });
+
       const round = getCurrentRound('sess_dup_exp', store);
       const customTm = new TimerManager();
 
@@ -763,7 +802,11 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
         voterToken: v.voter.sessionToken
       });
 
-      await waitForSessionState(client, s => s.vote?.tally?.Champion === 1);
+      // The accepted vote lands in the store; the live tally stays off the wire.
+      await waitForStoreState(
+        () => store.getState().getIn(['sessions', 'sess_final_tourn', 'vote', 'tally', 'Champion']),
+        (count) => count === 1
+      );
 
       const roundId = roundManager.getCurrentRoundId('sess_final_tourn', store);
 
@@ -833,7 +876,11 @@ describe('Feature 8 — Stage B: Reveal Timer & Socket Synchronization Hardening
         voterToken: v1.voter.sessionToken
       });
 
-      await waitForSessionState(c1, s => s.vote?.tally?.['Candidate 1'] === 1);
+      // Store is authoritative for the accepted vote (tally is hidden on the wire).
+      await waitForStoreState(
+        () => store.getState().getIn(['sessions', 'sess_freeze', 'vote', 'tally', 'Candidate 1']),
+        (count) => count === 1
+      );
 
       const roundId = roundManager.getCurrentRoundId('sess_freeze', store);
       roundManager.closeRoundOnce({

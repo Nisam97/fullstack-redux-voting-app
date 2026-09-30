@@ -37,18 +37,6 @@
       "skillPath": "skills/document/SKILL.md",
       "computedHash": "a47c5d29a1263d987c2fa05dbc993a5276aaf6c4ddc54fbd329463a5f3a1aa77"
     },
-    "model-redux-state/build-slices-and-selectors": {
-      "source": "reduxjs/redux-toolkit",
-      "sourceType": "github",
-      "skillPath": "packages/toolkit/skills/model-redux-state/build-slices-and-selectors/SKILL.md",
-      "computedHash": "95084920357bcff68b049b2227d18cd04e1f1c1da70af498119abb83e6e9716c"
-    },
-    "mongodb-connection": {
-      "source": "mongodb/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/mongodb-connection/SKILL.md",
-      "computedHash": "28953d0cee9671c78ae0c41e6e48c9f2e5aee3ca2652fd44c337c691a22ab7a1"
-    },
     "scope": {
       "source": "jsmastery-pro/skills",
       "sourceType": "github",
@@ -66,18 +54,6 @@
       "sourceType": "github",
       "skillPath": "skills/test/SKILL.md",
       "computedHash": "6b742c465b3e9cec898bf3621ec555faefb41fdcc0cbbf43ec0a6041fbdcb6be"
-    },
-    "vercel-react-best-practices": {
-      "source": "vercel-labs/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/react-best-practices/SKILL.md",
-      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
-    },
-    "vite": {
-      "source": "antfu/skills",
-      "sourceType": "github",
-      "skillPath": "skills/vite/SKILL.md",
-      "computedHash": "1cdc4bbecaa89544e6ef92566b015db989994bf90c4472683ac64f7a114dc3af"
     }
   }
 }

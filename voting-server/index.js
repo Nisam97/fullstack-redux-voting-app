@@ -1,9 +1,10 @@
 import makeStore from './src/store';
-import startServer from './src/server';
+import startServer, { getUniqueJoinCode } from './src/server';
 import { bootstrapDefaultSession, bootstrapHorrorSession,
   DEFAULT_SESSION_ID, HORROR_SESSION_ID } from './src/bootstrap';
 import { connectMongo, disconnectMongo } from './src/db/connection';
 import { recoverSessionsFromDb, persistSeedSessions } from './src/db/persistence';
+import { validateVoterJwtSecret } from './src/auth/voterCookie.js';
 
 const PORT = process.env.PORT || 8090;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/votesphere_dev';
@@ -20,6 +21,9 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/votesp
  */
 async function main() {
   try {
+    // Validate voter secret configuration
+    validateVoterJwtSecret();
+
     // 1. Connect to MongoDB — fail startup if unavailable
     await connectMongo(MONGODB_URI);
 
@@ -30,9 +34,11 @@ async function main() {
     const recovered = await recoverSessionsFromDb(store);
     console.log(`[Startup] Recovered ${recovered} session(s) from MongoDB`);
 
-    // 4. Bootstrap seed sessions (skip if already recovered from DB)
-    bootstrapDefaultSession(store);
-    bootstrapHorrorSession(store);
+    // 4. Bootstrap seed sessions (skip if already recovered from DB).
+    // Join codes are resolved against the DB (pending and open sessions only)
+    // so a seed can never collide with a recovered active session's code.
+    bootstrapDefaultSession(store, { joinCode: await getUniqueJoinCode() });
+    bootstrapHorrorSession(store, { joinCode: await getUniqueJoinCode() });
 
     // 5. Persist seed sessions to MongoDB (idempotent — skips if already in DB)
     await persistSeedSessions(store, [DEFAULT_SESSION_ID, HORROR_SESSION_ID]);
@@ -56,5 +62,13 @@ async function main() {
     process.exit(1);
   }
 }
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled promise rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught exception:', err);
+});
 
 main();

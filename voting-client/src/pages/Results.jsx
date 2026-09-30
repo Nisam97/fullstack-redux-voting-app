@@ -16,14 +16,17 @@ import {
   getSessionPairLockKey,
   selectRoundLifecycle,
   selectFinalVote,
-  selectRevealTimer
+  selectRevealTimer,
+  selectSessionRounds
 } from "../redux/voteSlice";
 import {
   subscribeSession,
   unsubscribeSession
 } from "../services/socket";
-import { fetchSessionResult } from "../services/history";
+import { fetchSessionResult, fetchSessionRounds } from "../services/history";
 import { getGuardedResultsPresentation } from "../components/results/resultsUtils";
+import RoundTimeline from "../components/results/RoundTimeline";
+import TotalsPanel from "../components/results/TotalsPanel";
 import "./Results.css";
 
 /**
@@ -52,11 +55,13 @@ function Results() {
   const roundLifecycle = useSelector((state) => selectRoundLifecycle(state, routeSessionId));
   const finalVote = useSelector((state) => selectFinalVote(state, routeSessionId));
   const revealTimer = useSelector((state) => selectRevealTimer(state, routeSessionId));
+  const sessionRounds = useSelector((state) => selectSessionRounds(state, routeSessionId));
 
   const pair = voteState?.pair || [];
   const tally = voteState?.tally || {};
 
   const [historicalResult, setHistoricalResult] = useState(null);
+  const [historicalRounds, setHistoricalRounds] = useState([]);
 
   // Periodic clock tick while timer is running to detect expiry without drift
   const isTimerRunning = timer?.status === 'running' && typeof timer?.expiresAt === 'number' && timer?.expiresAt > 0;
@@ -86,6 +91,12 @@ function Results() {
       }
     });
 
+    fetchSessionRounds(routeSessionId).then((res) => {
+      if (isMounted && res.success && Array.isArray(res.rounds)) {
+        setHistoricalRounds(res.rounds);
+      }
+    });
+
     return () => {
       isMounted = false;
       unsubscribeSession(routeSessionId);
@@ -95,6 +106,12 @@ function Results() {
   const effectiveWinner = winner || historicalResult?.winner;
   const isConcluded = Boolean(effectiveWinner);
   const displayTitle = session?.title || historicalResult?.title || routeSessionId;
+
+  const effectiveRounds = (sessionRounds && sessionRounds.length > 0)
+    ? sessionRounds
+    : (historicalRounds.length > 0
+        ? historicalRounds
+        : (historicalResult?.rounds || []));
 
   // Single source of truth for results presentation guarding
   const presentation = getGuardedResultsPresentation({
@@ -183,6 +200,13 @@ function Results() {
                   winnerLabel="🏆 Official Winner"
                 />
               </div>
+
+              {effectiveRounds.length > 0 && (
+                <div className="results-history-section" style={{ width: '100%', marginTop: '2rem' }}>
+                  <TotalsPanel rounds={effectiveRounds} />
+                  <RoundTimeline rounds={effectiveRounds} />
+                </div>
+              )}
 
               <div className="results-actions">
                 <Link to="/sessions" className="results-btn results-btn-primary">
@@ -375,6 +399,13 @@ function Results() {
                   </Link>
                 </div>
               </footer>
+
+              {effectiveRounds.length > 0 && (
+                <div className="results-history-section" style={{ width: '100%', marginTop: '2rem' }}>
+                  <TotalsPanel rounds={effectiveRounds} />
+                  <RoundTimeline rounds={effectiveRounds} />
+                </div>
+              )}
             </section>
           )}
         </div>

@@ -8,13 +8,16 @@
 
 import roundManager, {
   initRound,
+  hasOpenRound,
   getCurrentRoundId,
+  snapshotRoundEligibility,
   closeRoundOnce,
   expireReveal,
   endSessionRounds,
   ROUND_LIFECYCLE,
   DEFAULT_REVEAL_DURATION,
-  resolveRevealDuration
+  resolveRevealDuration,
+  resolveTieAuthoritative
 } from './roundManager.js';
 
 export const DEFAULT_TIMER_DURATION = 30; // seconds
@@ -67,6 +70,19 @@ export class TimerManager {
      * @type {Map<string, { sessionId: string, roundId?: string, duration: number, startedAt: number, expiresAt: number, timeoutId: NodeJS.Timeout, status: string }>}
      */
     this.activeRevealTimers = new Map();
+
+    /**
+     * Map of active tie pending timers keyed by sessionId.
+     * @type {Map<string, { sessionId: string, roundId?: string, duration: number, startedAt: number, expiresAt: number, timeoutId: NodeJS.Timeout, status: string }>}
+     */
+    this.activeTiePendingTimers = new Map();
+
+    /**
+     * Set of session IDs currently undergoing round opening / timer initialization.
+     * Guards against re-entrant timer starts during synchronous snapshot dispatches.
+     * @type {Set<string>}
+     */
+    this.startingTimers = new Set();
   }
 
   /**
@@ -169,7 +185,8 @@ export class TimerManager {
           roundId: targetRoundId,
           store: actualStore,
           timerManager: this,
-          io: actualIo
+          io: actualIo,
+          isTimerExpiry: true
         });
         return;
       }
@@ -191,7 +208,8 @@ export class TimerManager {
         roundId,
         store: actualStore,
         timerManager: this,
-        io: actualIo
+        io: actualIo,
+        isTimerExpiry: true
       });
       return;
     }
@@ -421,7 +439,159 @@ export class TimerManager {
   }
 
   /**
-   * Clears all active timers across all sessions (both voting and reveal).
+   * Starts a 30-second tie resolution countdown timer for an admin tie decision.
+   *
+   * @param {string} sessionId
+   * @param {string} roundId
+   * @param {number} [duration=30]
+   * @param {Object} [store]
+   * @param {Object} [io]
+   * @returns {Object|null}
+   */
+  startTiePendingTimer(sessionId, roundId, duration = 30, store = null, io = null) {
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+      return null;
+    }
+
+    const cleanSessionId = sessionId.trim();
+
+    if (this.activeTiePendingTimers.has(cleanSessionId)) {
+      this.clearTiePendingTimer(cleanSessionId);
+    }
+    if (this.activeTimers.has(cleanSessionId)) {
+      this.clearTimer(cleanSessionId);
+    }
+    if (this.activeRevealTimers.has(cleanSessionId)) {
+      this.clearRevealTimer(cleanSessionId);
+    }
+
+    const finalDuration = typeof duration === 'number' && duration > 0 ? duration : 30;
+    const startedAt = Date.now();
+    const expiresAt = startedAt + (finalDuration * 1000);
+
+    const timeoutId = setTimeout(() => {
+      this.handleTiePendingExpiry(cleanSessionId, roundId, store, io);
+    }, finalDuration * 1000);
+
+    if (timeoutId && typeof timeoutId.unref === 'function') {
+      timeoutId.unref();
+    }
+
+    const entry = {
+      sessionId: cleanSessionId,
+      roundId,
+      duration: finalDuration,
+      startedAt,
+      expiresAt,
+      timeoutId,
+      status: 'tie_pending'
+    };
+
+    this.activeTiePendingTimers.set(cleanSessionId, entry);
+
+    if (io && typeof io.to === 'function') {
+      io.to(`session:${cleanSessionId}`).emit('timer_state', {
+        sessionId: cleanSessionId,
+        roundId,
+        duration: finalDuration,
+        expiresAt,
+        status: 'tie_pending'
+      });
+    }
+
+    return {
+      sessionId: entry.sessionId,
+      roundId: entry.roundId,
+      duration: entry.duration,
+      startedAt: entry.startedAt,
+      expiresAt: entry.expiresAt,
+      status: entry.status
+    };
+  }
+
+  /**
+   * Clears active tie pending timer for a session.
+   *
+   * @param {string} sessionId
+   * @param {Object} [io]
+   * @returns {Object|null}
+   */
+  clearTiePendingTimer(sessionId, io = null) {
+    if (!sessionId || !this.activeTiePendingTimers.has(sessionId)) {
+      return null;
+    }
+
+    const entry = this.activeTiePendingTimers.get(sessionId);
+    if (entry.timeoutId) {
+      clearTimeout(entry.timeoutId);
+    }
+    this.activeTiePendingTimers.delete(sessionId);
+
+    if (io && typeof io.to === 'function') {
+      io.to(`session:${sessionId}`).emit('timer_state', {
+        sessionId,
+        duration: null,
+        expiresAt: null,
+        status: null
+      });
+    }
+
+    return {
+      sessionId: entry.sessionId,
+      roundId: entry.roundId,
+      duration: entry.duration,
+      status: 'cleared'
+    };
+  }
+
+  /**
+   * Gets active tie pending timer for a session.
+   *
+   * @param {string} sessionId
+   * @returns {Object|null}
+   */
+  getTiePendingTimer(sessionId) {
+    if (!sessionId || !this.activeTiePendingTimers.has(sessionId)) {
+      return null;
+    }
+    const entry = this.activeTiePendingTimers.get(sessionId);
+    return {
+      sessionId: entry.sessionId,
+      roundId: entry.roundId,
+      duration: entry.duration,
+      startedAt: entry.startedAt,
+      expiresAt: entry.expiresAt,
+      status: entry.status
+    };
+  }
+
+  /**
+   * Handles 30-second tie timer expiry by triggering automatic server coin flip.
+   * Satisfies AC-9.
+   *
+   * @param {string} sessionId
+   * @param {string} [roundId]
+   * @param {Object} [store]
+   * @param {Object} [io]
+   */
+  handleTiePendingExpiry(sessionId, roundId = null, store = null, io = null) {
+    if (!sessionId) return;
+    const cleanSessionId = sessionId.trim();
+
+    this.activeTiePendingTimers.delete(cleanSessionId);
+
+    resolveTieAuthoritative({
+      sessionId: cleanSessionId,
+      roundId,
+      choice: 'coin_flip',
+      store,
+      timerManager: this,
+      io
+    });
+  }
+
+  /**
+   * Clears all active timers across all sessions (voting, reveal, and tie pending).
    *
    * @param {Object} [io] - Optional Socket.io instance
    */
@@ -455,6 +625,21 @@ export class TimerManager {
       }
     }
     this.activeRevealTimers.clear();
+
+    for (const [sessionId, entry] of this.activeTiePendingTimers.entries()) {
+      if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+      }
+      if (io && typeof io.to === 'function') {
+        io.to(`session:${sessionId}`).emit('timer_state', {
+          sessionId,
+          duration: null,
+          expiresAt: null,
+          status: null
+        });
+      }
+    }
+    this.activeTiePendingTimers.clear();
   }
 
   /**
@@ -491,7 +676,7 @@ export class TimerManager {
 
       // 1. Session completed, archived, or winner determined -> clear timer
       const isInactive = status === 'completed' || status === 'archived' || Boolean(winner);
-      const wasActive = prevStatus === 'open' || this.activeTimers.has(sessionId) || this.activeRevealTimers.has(sessionId);
+      const wasActive = prevStatus === 'open' || this.activeTimers.has(sessionId) || this.activeRevealTimers.has(sessionId) || this.activeTiePendingTimers.has(sessionId);
 
       if (isInactive) {
         endSessionRounds(sessionId);
@@ -502,6 +687,10 @@ export class TimerManager {
         }
         if (this.activeRevealTimers.has(sessionId)) {
           this.clearRevealTimer(sessionId, io);
+          emitted = true;
+        }
+        if (this.activeTiePendingTimers.has(sessionId)) {
+          this.clearTiePendingTimer(sessionId, io);
           emitted = true;
         }
         if (!emitted && wasActive && io && typeof io.to === 'function') {
@@ -515,60 +704,74 @@ export class TimerManager {
         return;
       }
 
-      // 2. Open session with an active pair -> manage round timer
+      // 2. Open session with active candidates/pair -> manage round timer
       if (status === 'open') {
-        const activePair = session.getIn(['vote', 'pair']);
-        const hasPair = activePair && (
-          typeof activePair.isEmpty === 'function' ? !activePair.isEmpty() : activePair.length > 0
+        const votingMode = session.get('votingMode');
+        const activeCandidates = session.getIn(['vote', 'candidates']) || session.getIn(['vote', 'pair']);
+        const hasCandidates = activeCandidates && (
+          typeof activeCandidates.isEmpty === 'function' ? !activeCandidates.isEmpty() : activeCandidates.length > 0
         );
 
-        if (!hasPair) {
+        if (!hasCandidates) {
           if (this.activeTimers.has(sessionId)) {
             this.clearTimer(sessionId, io);
           }
           if (this.activeRevealTimers.has(sessionId)) {
             this.clearRevealTimer(sessionId, io);
           }
+          if (this.activeTiePendingTimers.has(sessionId)) {
+            this.clearTiePendingTimer(sessionId, io);
+          }
           return;
         }
 
-        const prevPair = prevSession ? prevSession.getIn(['vote', 'pair']) : null;
-        const pairChanged = !prevPair || (
-          typeof prevPair.equals === 'function'
-            ? !prevPair.equals(activePair)
-            : JSON.stringify(prevPair) !== JSON.stringify(activePair)
+        const prevCandidates = prevSession ? (prevSession.getIn(['vote', 'candidates']) || prevSession.getIn(['vote', 'pair'])) : null;
+        const candidatesChanged = !prevCandidates || (
+          typeof prevCandidates.equals === 'function'
+            ? !prevCandidates.equals(activeCandidates)
+            : JSON.stringify(prevCandidates) !== JSON.stringify(activeCandidates)
         );
         const statusChangedToOpen = prevStatus !== 'open';
 
         // Check round lifecycle state
         const roundLifecycle = session.get('roundLifecycle') || roundManager.getRoundLifecycle(sessionId);
-        const isRoundClosedOrRevealing = roundLifecycle === ROUND_LIFECYCLE.ROUND_CLOSED ||
-                                         roundLifecycle === ROUND_LIFECYCLE.RESULTS_REVEALED ||
-                                         this.activeRevealTimers.has(sessionId);
+        const isRoundClosedOrRevealingOrPending = roundLifecycle === ROUND_LIFECYCLE.ROUND_CLOSED ||
+                                                 roundLifecycle === ROUND_LIFECYCLE.RESULTS_REVEALED ||
+                                                 roundLifecycle === ROUND_LIFECYCLE.TIE_PENDING ||
+                                                 this.activeRevealTimers.has(sessionId) ||
+                                                 this.activeTiePendingTimers.has(sessionId);
 
-        // If round is currently closed or in results reveal, do NOT start/restart voting timer
-        if (isRoundClosedOrRevealing) {
+        // If round is currently closed, revealing, or tie pending, do NOT start/restart voting timer
+        if (isRoundClosedOrRevealingOrPending) {
           return;
         }
 
-        // If pair changed, make sure any lingering reveal timer from previous round is cleared
-        if (pairChanged && this.activeRevealTimers.has(sessionId)) {
+        // If candidates changed, make sure any lingering reveal timer from previous round is cleared
+        if (candidatesChanged && this.activeRevealTimers.has(sessionId)) {
           this.clearRevealTimer(sessionId, io);
         }
 
         // Start timer if:
-        // - Pair changed (new round)
+        // - Candidates changed (new round/runoff)
         // - Session just opened
-        // - Or timer is not running yet for this active pair
-        if (pairChanged || statusChangedToOpen || !this.activeTimers.has(sessionId)) {
-          const pairArray = activePair && typeof activePair.toJS === 'function'
-            ? activePair.toJS()
-            : (Array.isArray(activePair) ? activePair : []);
-          if (pairArray && pairArray.length >= 2) {
-            initRound(sessionId, pairArray);
+        // - Or timer is not running yet
+        if ((candidatesChanged || statusChangedToOpen || !this.activeTimers.has(sessionId)) && !this.startingTimers.has(sessionId)) {
+          this.startingTimers.add(sessionId);
+          try {
+            const candidatesArray = activeCandidates && typeof activeCandidates.toJS === 'function'
+              ? activeCandidates.toJS()
+              : (Array.isArray(activeCandidates) ? activeCandidates : []);
+            if (candidatesArray && candidatesArray.length >= 2 && !hasOpenRound(sessionId)) {
+              initRound(sessionId, candidatesArray, {
+                kind: votingMode === 'single_ballot' ? 'single_ballot' : 'pairwise',
+                store
+              });
+            }
+            const customDuration = session.get('timerDuration');
+            this.startTimer(sessionId, customDuration, store, io);
+          } finally {
+            this.startingTimers.delete(sessionId);
           }
-          const customDuration = session.get('timerDuration');
-          this.startTimer(sessionId, customDuration, store, io);
         }
       } else if (status === 'pending') {
         // Pending session has no active timer
@@ -577,6 +780,9 @@ export class TimerManager {
         }
         if (this.activeRevealTimers.has(sessionId)) {
           this.clearRevealTimer(sessionId, io);
+        }
+        if (this.activeTiePendingTimers.has(sessionId)) {
+          this.clearTiePendingTimer(sessionId, io);
         }
       }
     });
@@ -590,6 +796,9 @@ export class TimerManager {
           }
           if (this.activeRevealTimers.has(sessionId)) {
             this.clearRevealTimer(sessionId, io);
+          }
+          if (this.activeTiePendingTimers.has(sessionId)) {
+            this.clearTiePendingTimer(sessionId, io);
           }
         }
       });

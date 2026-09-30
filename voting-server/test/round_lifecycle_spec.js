@@ -194,6 +194,10 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
       const round = getCurrentRound('sess_life_4', store);
       const customTm = new TimerManager();
 
+      // Decisive vote first: an empty round is a 0:0 tie and travels the tie
+      // ladder (rematch) instead of advancing the bracket on reveal expiry.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_life_4', entry: 'A' });
+
       closeRoundOnce({
         sessionId: 'sess_life_4',
         roundId: round.roundId,
@@ -265,12 +269,16 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
       const client = createClientSocket({ auth: { voterToken: v.voter.sessionToken } });
       client.emit('subscribe_session', 'sess_restr');
 
-      client.on('session_state', (state) => {
-        if (state.vote && state.vote.tally && state.vote.tally.Alpha === 1) {
-          expect(state.roundLifecycle).to.equal('VOTING');
+      // The live tally is hidden from broadcasts during an active round (shared
+      // guard), so the accepted vote is verified in the authoritative store.
+      const poll = setInterval(() => {
+        const tally = store.getState().getIn(['sessions', 'sess_restr', 'vote', 'tally', 'Alpha']);
+        if (tally === 1) {
+          clearInterval(poll);
+          expect(store.getState().getIn(['sessions', 'sess_restr', 'roundLifecycle'])).to.equal('VOTING');
           done();
         }
-      });
+      }, 20);
 
       setTimeout(() => {
         client.emit('action', {
@@ -568,15 +576,17 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
         dispatch: (action) => {
           if (action.type === 'NEXT') nextDispatchCount++;
         }
-      };
-
-      store.dispatch({
+      };      store.dispatch({
         type: 'CREATE_SESSION',
         sessionId: 'sess_race_2',
         title: 'Race 2',
         entries: ['A', 'B', 'C']
       });
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_race_2' });
+
+      // Decisive vote first: an empty round is a 0:0 tie and ladders instead
+      // of advancing through NEXT on reveal expiry.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_race_2', entry: 'A' });
 
       const round = getCurrentRound('sess_race_2', store);
       const customTm = new TimerManager();
@@ -711,6 +721,10 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
         entries: ['A', 'B', 'C']
       });
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_race_5' });
+
+      // Decisive vote first: an empty round is a 0:0 tie and travels the tie
+      // ladder instead of advancing the bracket on reveal expiry.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_race_5', entry: 'A' });
 
       const round = getCurrentRound('sess_race_5', store);
       const customTm = new TimerManager();
@@ -873,6 +887,9 @@ describe('Feature 8 — Stage A: Backend Round Results Lifecycle', () => {
       const v = registerVoter({ sessionId: 'sess_recon', displayName: 'ReconVoter2', store });
       const roundId = roundManager.getCurrentRoundId('sess_recon', store);
 
+      // Close round and enter reveal. The vote must be decisive: an empty
+      // round is a 0:0 tie and ladders instead of advancing to Film 3 vs Film 1.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_recon', entry: 'Film 1' });
       roundManager.closeRoundOnce({
         sessionId: 'sess_recon',
         roundId,

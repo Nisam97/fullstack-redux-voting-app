@@ -83,6 +83,28 @@ describe('server', () => {
     });
   }
 
+  // Polls the authoritative store until the accepted vote shows up. The live
+  // tally is hidden from broadcasts during an active round (shared guard), so
+  // a bare vote no longer produces a session_state emission.
+  function waitForStoreTally(sessionId, entry, timeoutMs = 2000) {
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      const tick = () => {
+        const count = store.getState().getIn(['sessions', sessionId, 'vote', 'tally', entry]);
+        if (typeof count === 'number' && count > 0) {
+          resolve(count);
+          return;
+        }
+        if (Date.now() - started > timeoutMs) {
+          reject(new Error(`Timed out waiting for tally of "${entry}" in ${sessionId}`));
+          return;
+        }
+        setTimeout(tick, 20);
+      };
+      tick();
+    });
+  }
+
   beforeEach((done) => {
     clearAdmin();
     clearVoters();
@@ -200,7 +222,9 @@ describe('server', () => {
         entries: ['Sunshine']
       });
       expect(state.vote).to.deep.equal({
-        pair: ['Trainspotting', '28 Days Later']
+        pair: ['Trainspotting', '28 Days Later'],
+        // The shared guard empties the live tally during an active round.
+        tally: {}
       });
     });
 
@@ -244,16 +268,15 @@ describe('server', () => {
       const { socket } = await connectClient();
       await subscribeClient(socket, 'sess_default');
 
-      const updatePromise = waitForNextSessionState(socket);
       socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
 
-      const updatedState = await updatePromise;
-      expect(updatedState.id).to.equal('sess_default');
-      expect(updatedState.vote.tally).to.deep.equal({ Trainspotting: 1 });
+      // The vote is accepted and applied; its tally stays off the wire.
+      const count = await waitForStoreTally('sess_default', 'Trainspotting');
+      expect(count).to.equal(1);
       expect(store.getState().getIn(['sessions', 'sess_default', 'vote', 'tally', 'Trainspotting'])).to.equal(1);
     });
 
@@ -261,17 +284,17 @@ describe('server', () => {
       const { socket } = await connectClient();
       await subscribeClient(socket, 'sess_default');
 
-      // Vote for Trainspotting
-      let updatePromise = waitForNextSessionState(socket);
+      // Vote for Trainspotting (accepted in store; no broadcast while the
+      // tally is hidden)
       socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
-      await updatePromise;
+      await waitForStoreTally('sess_default', 'Trainspotting');
 
       // Advance round via NEXT
-      updatePromise = waitForNextSessionState(socket);
+      const updatePromise = waitForNextSessionState(socket);
       socket.emit('action', {
         type: 'NEXT',
         sessionId: 'sess_default'
@@ -317,10 +340,12 @@ describe('server', () => {
         entry: 'Trainspotting'
       });
 
+      // The accepted vote is verified in the store; a bare vote with a hidden
+      // tally produces no broadcast at all.
+      await waitForStoreTally('sess_default', 'Trainspotting');
       await new Promise(resolve => setTimeout(resolve, 50));
-      expect(receivedEvent).to.be.ok;
-      expect(receivedEvent.id).to.equal('sess_default');
-      expect(receivedEvent.vote.tally.Trainspotting).to.equal(1);
+      expect(receivedEvent).to.be.null;
+      expect(store.getState().getIn(['sessions', 'sess_default', 'vote', 'tally', 'Trainspotting'])).to.equal(1);
     });
   });
 
@@ -337,16 +362,14 @@ describe('server', () => {
         clientBReceived.push(state);
       });
 
-      const aUpdatePromise = waitForNextSessionState(clientA.socket);
       clientA.socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
 
-      const stateA = await aUpdatePromise;
-      expect(stateA.id).to.equal('sess_default');
-
+      // A bare vote (hidden tally) produces no broadcast in any room.
+      await waitForStoreTally('sess_default', 'Trainspotting');
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(clientBReceived.length).to.equal(0);
     });
@@ -363,16 +386,14 @@ describe('server', () => {
         clientAReceived.push(state);
       });
 
-      const bUpdatePromise = waitForNextSessionState(clientB.socket);
       clientB.socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_horror',
         entry: 'The Shining'
       });
 
-      const stateB = await bUpdatePromise;
-      expect(stateB.id).to.equal('sess_horror');
-
+      // A bare vote (hidden tally) produces no broadcast in any room.
+      await waitForStoreTally('sess_horror', 'The Shining');
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(clientAReceived.length).to.equal(0);
     });
@@ -410,16 +431,27 @@ describe('server', () => {
       const updatePromiseA = waitForNextSessionState(clientA.socket);
       const updatePromiseB = waitForNextSessionState(clientB.socket);
 
+      // One accepted vote (verified in store; a bare vote emits nothing while
+      // the tally is hidden), then the admin NEXT advances the round, which
+      // broadcasts to the whole room.
       clientA.socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
+      await waitForStoreTally('sess_default', 'Trainspotting');
+      clientA.socket.emit('action', {
+        type: 'NEXT',
+        sessionId: 'sess_default'
+      });
 
       const [stateA, stateB] = await Promise.all([updatePromiseA, updatePromiseB]);
 
-      expect(stateA.vote.tally).to.deep.equal({ Trainspotting: 1 });
-      expect(stateB.vote.tally).to.deep.equal({ Trainspotting: 1 });
+      // Both room subscribers receive the advancement broadcast.
+      expect(stateA.id).to.equal('sess_default');
+      expect(stateB.id).to.equal('sess_default');
+      expect(stateA.vote.pair).to.deep.equal(['Sunshine', 'Trainspotting']);
+      expect(stateB.vote.pair).to.deep.equal(['Sunshine', 'Trainspotting']);
     });
   });
 
@@ -454,12 +486,18 @@ describe('server', () => {
         clientAReceived = true;
       });
 
-      // Client B votes in sess_default
+      // Client B (still subscribed) votes and advances via admin NEXT: the
+      // broadcast reaches B only.
       const updatePromiseB = waitForNextSessionState(clientB.socket);
       clientB.socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
+      });
+      await waitForStoreTally('sess_default', 'Trainspotting');
+      clientB.socket.emit('action', {
+        type: 'NEXT',
+        sessionId: 'sess_default'
       });
       await updatePromiseB;
 
@@ -546,14 +584,13 @@ describe('server', () => {
       expect(socket.connected).to.be.true;
 
       // Ensure server still works perfectly on valid action
-      const updatePromise = waitForNextSessionState(socket);
       socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
-      const state = await updatePromise;
-      expect(state.vote.tally.Trainspotting).to.equal(1);
+      const count = await waitForStoreTally('sess_default', 'Trainspotting');
+      expect(count).to.equal(1);
     });
   });
 
@@ -583,21 +620,23 @@ describe('server', () => {
       const clientA = await connectClient();
       await subscribeClient(clientA.socket, 'sess_default');
 
-      // Advance round and vote while clientB is offline
-      const votePromise = waitForNextSessionState(clientA.socket);
+      // Vote while clientB is offline (accepted in store; no broadcast while
+      // the tally is hidden)
       clientA.socket.emit('action', {
         type: 'VOTE',
         sessionId: 'sess_default',
         entry: 'Trainspotting'
       });
-      await votePromise;
+      await waitForStoreTally('sess_default', 'Trainspotting');
 
       // Client B connects fresh (simulating reconnect / new session)
       const clientB = await connectClient();
       const stateB = await subscribeClient(clientB.socket, 'sess_default');
 
       expect(stateB.id).to.equal('sess_default');
-      expect(stateB.vote.tally).to.deep.equal({ Trainspotting: 1 });
+      // Hydration applies the same guard: the live tally never reaches the wire.
+      expect(stateB.vote.tally).to.deep.equal({});
+      expect(store.getState().getIn(['sessions', 'sess_default', 'vote', 'tally', 'Trainspotting'])).to.equal(1);
     });
   });
 });

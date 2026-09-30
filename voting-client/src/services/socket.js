@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { setSessions, setSessionState, setState, lobbyUpdate, setTimerState } from '../redux/voteSlice.js';
+import { setSessions, setSessionState, setState, lobbyUpdate, setPresenceUpdate, setTimerState, setTiePending } from '../redux/voteSlice.js';
 
 const getDefaultServerUrl = () => {
   if (typeof window !== 'undefined' && window.__VOTING_SERVER_URL__) {
@@ -48,12 +48,20 @@ export function connectSocket() {
   return socket;
 }
 
-/**
- * Disconnect the socket.
- */
 export function disconnectSocket() {
-  if (socket.connected) {
-    socket.disconnect();
+  if (socket) {
+    try {
+      socket.disconnect();
+    } catch {
+      // harmless
+    }
+    if (socket.io && typeof socket.io.close === 'function') {
+      try {
+        socket.io.close();
+      } catch {
+        // harmless
+      }
+    }
   }
   return socket;
 }
@@ -84,13 +92,35 @@ export function requestSessionsRegistry(socketInstance = socket) {
 export const requestElectionsRegistry = requestSessionsRegistry;
 
 /**
+ * Retrieves the stored session-scoped voter token for a specific session.
+ * 
+ * @param {string} sessionId
+ * @returns {string|null}
+ */
+export function getStoredVoterToken(sessionId) {
+  if (!sessionId || typeof window === 'undefined') return null;
+  const key = `votesphere_voter_token_${sessionId}`;
+  if (window.sessionStorage) {
+    const token = window.sessionStorage.getItem(key);
+    if (token) return token;
+  }
+  if (window.localStorage) {
+    const token = window.localStorage.getItem(key);
+    if (token) return token;
+  }
+  return null;
+}
+
+
+/**
  * Subscribes to updates for a specific session room.
  * Records the session in the local subscription registry and emits 'subscribe_session'.
  * 
  * @param {string} sessionId
  * @param {object} [socketInstance=socket]
+ * @param {string} [voterTokenOverride]
  */
-export function subscribeSession(sessionId, socketInstance = socket) {
+export function subscribeSession(sessionId, socketInstance = socket, voterTokenOverride = null) {
   if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
     return;
   }
@@ -98,8 +128,11 @@ export function subscribeSession(sessionId, socketInstance = socket) {
   const normalizedId = sessionId.trim();
   subscribedSessions.add(normalizedId);
 
+  const token = voterTokenOverride || getStoredVoterToken(normalizedId);
+  const payload = token ? { sessionId: normalizedId, voterToken: token } : { sessionId: normalizedId };
+
   if (socketInstance && typeof socketInstance.emit === 'function') {
-    socketInstance.emit('subscribe_session', { sessionId: normalizedId });
+    socketInstance.emit('subscribe_session', payload);
   }
 }
 
@@ -198,7 +231,9 @@ export function connectSocketToStore(store, socketInstance = socket) {
     socketInstance.off('sessions');
     socketInstance.off('session_state');
     socketInstance.off('lobby_update');
+    socketInstance.off('presence_update');
     socketInstance.off('timer_state');
+    socketInstance.off('tie_pending');
     socketInstance.off('state');
     socketInstance.off('connect');
   }
@@ -213,14 +248,24 @@ export function connectSocketToStore(store, socketInstance = socket) {
     store.dispatch(setSessionState(sessionData));
   });
 
-  // Listen for room-scoped lobby updates
+  // Listen for room scoped lobby updates
   socketInstance.on('lobby_update', (lobbyData) => {
     store.dispatch(lobbyUpdate(lobbyData));
+  });
+
+  // Listen for room scoped presence updates
+  socketInstance.on('presence_update', (presenceData) => {
+    store.dispatch(setPresenceUpdate(presenceData));
   });
 
   // Listen for room-scoped timer updates
   socketInstance.on('timer_state', (timerData) => {
     store.dispatch(setTimerState(timerData));
+  });
+
+  // Listen for tie pending ladder updates
+  socketInstance.on('tie_pending', (tieData) => {
+    store.dispatch(setTiePending(tieData));
   });
 
   // Backward compatibility: legacy single-session 'state' event
@@ -233,10 +278,12 @@ export function connectSocketToStore(store, socketInstance = socket) {
     // Request fresh registry
     requestSessionsRegistry(socketInstance);
 
-    // Restore any active session subscriptions
+    // Restore any active session subscriptions with voter token if present
     for (const sessionId of subscribedSessions) {
       if (typeof socketInstance.emit === 'function') {
-        socketInstance.emit('subscribe_session', { sessionId });
+        const voterToken = getStoredVoterToken(sessionId);
+        const payload = voterToken ? { sessionId, voterToken } : { sessionId };
+        socketInstance.emit('subscribe_session', payload);
       }
     }
   });

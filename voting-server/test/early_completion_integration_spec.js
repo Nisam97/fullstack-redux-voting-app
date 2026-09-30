@@ -95,13 +95,17 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       const client = createClientSocket({ auth: { voterToken: v1.voter.sessionToken } });
       client.emit('subscribe_session', 'sess_vote_int');
 
-      client.on('session_state', (state) => {
-        if (state.vote && state.vote.tally && state.vote.tally.Trainspotting === 1) {
+      // The live tally is hidden from broadcasts during an active round (shared
+      // guard), so the accepted vote is verified in the authoritative store.
+      const poll = setInterval(() => {
+        const tally = store.getState().getIn(['sessions', 'sess_vote_int', 'vote', 'tally', 'Trainspotting']);
+        if (tally === 1) {
+          clearInterval(poll);
           const roundId = roundManager.getCurrentRoundId('sess_vote_int', store);
           expect(roundManager.getRoundSubmissionCount({ sessionId: 'sess_vote_int', roundId })).to.equal(1);
           done();
         }
-      });
+      }, 20);
 
       setTimeout(() => {
         client.emit('action', {
@@ -125,12 +129,18 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
 
       let completed = false;
       c1.on('session_state', (state) => {
-        if (state.vote && Array.isArray(state.vote.pair)) {
-          // Initial pair was ['Trainspotting', '28 Days Later']. Next pair is ['Sunshine', 'Trainspotting']
-          if (state.vote.pair[0] === 'Sunshine' && !completed) {
-            completed = true;
+        // The two votes tie 1-1: under the AC-5 ladder the tied pair is
+        // requeued for an immediate rematch, so the round closes with a reveal
+        // and the next round keeps the same pair.
+        if (state.roundLifecycle === 'RESULTS_REVEALED' && !completed) {
+          completed = true;
+          setTimeout(() => {
+            const session = store.getState().getIn(['sessions', 'sess_vote_int']);
+            expect(session.get('tieCount')).to.equal(1);
+            expect(session.getIn(['vote', 'pair']).toJS()).to.deep.equal(['Trainspotting', '28 Days Later']);
+            expect(session.get('roundLifecycle')).to.equal('VOTING');
             done();
-          }
+          }, 1300);
         }
       });
 
@@ -299,6 +309,10 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       const round1Id = roundManager.getCurrentRoundId('sess_timer_adv', store);
       expect(round1Id).to.be.ok;
 
+      // Decisive vote first: an empty round is a 0:0 tie and travels the tie
+      // ladder (rematch) instead of advancing the bracket.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_timer_adv', entry: 'Item 1' });
+
       // Force timer expiry via handleExpiry
       io.timerManager.handleExpiry('sess_timer_adv', round1Id, store, io);
 
@@ -336,19 +350,30 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       c2.emit('subscribe_session', 'sess_timer_cancel');
 
       const round1Id = roundManager.getCurrentRoundId('sess_timer_cancel', store);
+      let finished = false;
 
       c1.on('session_state', (state) => {
-        if (state.vote && state.vote.pair && state.vote.pair[0] === 'C') {
-          // Round 1 completed early and advanced to Round 2
+        if (state.roundLifecycle === 'RESULTS_REVEALED') {
+          // Round 1 completed early (A and B tied 1-1, requeued as a rematch).
+          if (finished) return;
+          finished = true;
           expect(roundManager.isRoundClosed('sess_timer_cancel', round1Id)).to.be.true;
 
           // If the old Round 1 timer expiry callback now fires, it must be harmless
           io.timerManager.handleExpiry('sess_timer_cancel', round1Id, store, io);
 
-          // State must still be on Round 2 pair ['C', 'A']
-          const curr = store.getState().getIn(['sessions', 'sess_timer_cancel']);
-          expect(curr.getIn(['vote', 'pair']).toJS()).to.deep.equal(['C', 'A']);
-          done();
+          setTimeout(() => {
+            try {
+              // State must be back in VOTING on the requeued pair.
+              const curr = store.getState().getIn(['sessions', 'sess_timer_cancel']);
+              expect(curr.get('roundLifecycle')).to.equal('VOTING');
+              expect(curr.getIn(['vote', 'pair']).toJS()).to.deep.equal(['A', 'B']);
+              expect(curr.get('tieCount')).to.equal(1);
+              done();
+            } catch (err) {
+              done(err);
+            }
+          }, 1300);
         }
       });
 
@@ -476,6 +501,7 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       clientB.emit('subscribe_session', 'sess_room_b');
 
       let clientBReceivedState = false;
+      let finished = false;
       clientB.on('session_state', (bState) => {
         // Only initial state for sess_room_b is expected
         if (bState.id === 'sess_room_a') {
@@ -484,7 +510,10 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       });
 
       clientA.on('session_state', (aState) => {
-        if (aState.vote && aState.vote.pair && aState.vote.pair[0] === 'A3') {
+        // A lone vote no longer changes the broadcast (hidden tally); the first
+        // emission after the two votes is the reveal transition.
+        if (aState.roundLifecycle === 'RESULTS_REVEALED' && !finished) {
+          finished = true;
           expect(clientBReceivedState).to.be.false;
           done();
         }
@@ -507,15 +536,19 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
       client.emit('subscribe_session', 'sess_room_a');
 
       let timerStartedForNewPair = false;
+      let finished = false;
       client.on('timer_state', (timerState) => {
-        if (timerState.status === 'running' && timerStartedForNewPair) {
+        if (timerState.status === 'running' && timerStartedForNewPair && !finished) {
+          finished = true;
           expect(timerState.duration).to.equal(30);
           done();
         }
       });
 
       client.on('session_state', (state) => {
-        if (state.vote && state.vote.pair && state.vote.pair[0] === 'A3') {
+        // The votes tie 1-1, so the next round is the AC-5 rematch of the same
+        // pair; the reveal transition is the observable marker for it.
+        if (state.roundLifecycle === 'RESULTS_REVEALED') {
           timerStartedForNewPair = true;
         }
       });
@@ -584,6 +617,9 @@ describe('Feature 7 — Stage B: Backend Socket, Vote & Timer Integration Verifi
 
     it('14. two near-simultaneous final-voter events produce exactly ONE NEXT action', () => {
       const round = roundManager.initRound('sess_race_hard', ['E1', 'E2']);
+      // Decisive vote first: an empty round is a 0:0 tie and ladders instead
+      // of advancing through NEXT.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_race_hard', entry: 'E1' });
       let nextCount = 0;
       const origDispatch = store.dispatch;
       store.dispatch = (action) => {

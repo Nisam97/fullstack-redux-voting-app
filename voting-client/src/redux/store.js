@@ -13,6 +13,7 @@ import voteReducer, {
   SET_TIMER_STATE
 } from './voteSlice.js';
 import historyReducer from './historySlice.js';
+import voterAuthReducer from './voterAuthSlice.js';
 import socket, { connectSocketToStore } from '../services/socket.js';
 import { getAdminToken, getVoterToken } from '../services/auth.js';
 
@@ -25,7 +26,14 @@ export const REMOTE_ACTION_TYPES = new Set([
   'SET_ENTRIES',
   'CREATE_SESSION',
   'START_SESSION',
-  'ARCHIVE_SESSION'
+  'ARCHIVE_SESSION',
+  'REFRESH_JOIN_CODE',
+  'RESOLVE_TIE',
+  'SET_ALLOWLIST',
+  'APPROVE_PARTICIPANT',
+  'REJECT_PARTICIPANT',
+  'REMOVE_PARTICIPANT',
+  'SET_WHO_CAN_JOIN'
 ]);
 
 /**
@@ -44,6 +52,8 @@ export const LOCAL_ACTION_TYPES = new Set([
   SET_LOBBY_UPDATE,
   TIMER_STATE,
   SET_TIMER_STATE,
+  'APPEND_ROUND_RESULT',
+  'sessions/appendRoundResult',
   'voting/setState',
   'voting/resetState',
   'sessions/setSessions',
@@ -54,7 +64,14 @@ export const LOCAL_ACTION_TYPES = new Set([
   'sessions/timerState',
   'sessions/setTimerState',
   'sessions/setState',
-  'sessions/resetState'
+  'sessions/resetState',
+  'SET_TIE_PENDING',
+  'tie_pending',
+  'sessions/setTiePendingAction',
+  'voterAuth/setVoterAuth',
+  'voterAuth/clearVoterAuth',
+  'voterAuth/setVoterLoading',
+  'voterAuth/setVoterError'
 ]);
 
 /**
@@ -83,13 +100,14 @@ export function isRemoteAction(action) {
  * 
  * @param {object} [socketInstance] - Socket.io client instance
  */
-export const createRemoteActionMiddleware = (socketInstance) => () => (next) => (action) => {
+export const createRemoteActionMiddleware = (socketInstance) => (storeApi) => (next) => (action) => {
   if (isRemoteAction(action)) {
     let enrichedAction = action;
 
     if (action.type === 'VOTE') {
       const sessionId = action.sessionId || action.electionId;
-      const voterToken = action.voterToken || action.meta?.voterToken || getVoterToken(sessionId);
+      const loggedInUserId = storeApi?.getState?.()?.voterAuth?.user?.id;
+      const voterToken = action.voterToken || action.meta?.voterToken || getVoterToken(sessionId) || (loggedInUserId ? `user:${loggedInUserId}` : null);
       if (voterToken && !action.voterToken) {
         enrichedAction = {
           ...action,
@@ -102,7 +120,14 @@ export const createRemoteActionMiddleware = (socketInstance) => () => (next) => 
       action.type === 'SET_ENTRIES' ||
       action.type === 'CREATE_SESSION' ||
       action.type === 'START_SESSION' ||
-      action.type === 'ARCHIVE_SESSION'
+      action.type === 'ARCHIVE_SESSION' ||
+      action.type === 'REFRESH_JOIN_CODE' ||
+      action.type === 'RESOLVE_TIE' ||
+      action.type === 'SET_ALLOWLIST' ||
+      action.type === 'APPROVE_PARTICIPANT' ||
+      action.type === 'REJECT_PARTICIPANT' ||
+      action.type === 'REMOVE_PARTICIPANT' ||
+      action.type === 'SET_WHO_CAN_JOIN'
     ) {
       const adminToken = action.token || action.meta?.token || getAdminToken();
       if (adminToken && !action.token) {
@@ -131,7 +156,8 @@ export function createAppStore(socketInstance = socket) {
   const storeInstance = configureStore({
     reducer: {
       sessions: voteReducer,
-      history: historyReducer
+      history: historyReducer,
+      voterAuth: voterAuthReducer
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({

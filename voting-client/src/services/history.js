@@ -91,3 +91,52 @@ export async function fetchSessionResult(sessionId) {
     };
   }
 }
+
+/**
+ * Fetch the round history array for a specific session ID (AC-7).
+ *
+ * @param {string} sessionId
+ * @returns {Promise<{ success: boolean, sessionId?: string, rounds?: Array<object>, error?: string, message?: string }>}
+ */
+export async function fetchSessionRounds(sessionId) {
+  if (!sessionId) {
+    return {
+      success: false,
+      error: 'INVALID_SESSION_ID',
+      message: 'Session ID is required.'
+    };
+  }
+
+  try {
+    const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/rounds`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'ROUNDS_NOT_FOUND',
+        message: data.message || `No rounds found for session "${sessionId}".`,
+        rounds: []
+      };
+    }
+
+    return {
+      success: true,
+      sessionId: data.sessionId,
+      rounds: Array.isArray(data.rounds) ? data.rounds : []
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Network error connecting to history server.',
+      rounds: []
+    };
+  }
+}

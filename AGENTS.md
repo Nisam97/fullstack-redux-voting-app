@@ -5,16 +5,18 @@
 - **Language / Runtime**: JavaScript (ES modules), Node.js 18+
 - **Frontend**: React 19, Vite 8, Redux Toolkit 2, React Router 7, Recharts, Socket.io client
 - **Backend**: Node `http`, Socket.io 4, Redux 5 over Immutable.js 3, Mongoose 9 on MongoDB
-- **Key dependencies**: @reduxjs/toolkit, immutable, mongoose, socket.io, jsonwebtoken, bcrypt
+- **Key dependencies**: @reduxjs/toolkit, immutable, mongoose, socket.io, jsonwebtoken, bcrypt; client extras: qrcode (lobby QR codes), lucide-react, react-icons
 - **Package manager**: npm, two separate packages (`voting-client`, `voting-server`), no workspace tooling
 
 ## Build approach
 
-<TBD, set by /scope>
+Tracer Bullet (each phase adds one real, thin end-to-end strand through the full stack; nothing faked).
 
 ## Commands
 
 ```bash
+# Environment (server reads .env at the repo root; Mongo defaults to mongodb://localhost:27017/votesphere_dev)
+cp .env.example .env
 # Install (run inside each package)
 cd voting-client && npm install
 cd voting-server && npm install
@@ -38,7 +40,8 @@ Stored in `docs/specs/`, format `docs/specs/NNNN-title.md`. Long form design not
 - `voting-server/src/core.js` is a protected 39 line pure module with a pinned SHA-256. Do not edit it, wrap new behavior around it.
 - Backend state is an Immutable.js Map keyed `sessions.<sessionId>`. Reducers return new state, never mutate, and every session scoped action carries `sessionId`.
 - Lifecycle mutations (`CREATE_SESSION`, `START_SESSION`, `NEXT`, `ARCHIVE_SESSION`, `SET_ENTRIES`) travel over Socket.io behind an admin JWT. There are no REST lifecycle mutation endpoints.
-- Duplicate votes are blocked on the composite key `${sessionId}:::${pair}:::${voterToken}`. Round identity is monotonic `${sessionId}:::r${roundIndex}`, and a callback for an older round is stale and ignored.
+- Duplicate votes are blocked on the composite key `${sessionId}:::${roundId}:::${sortedPair}:::${voterToken}` (pair is sorted, `roundId` is the monotonic identity `${sessionId}:::r${roundIndex}`). Scoping the key per round means a pair that meets again after a tie accepts fresh votes. A callback for an older round is stale and ignored.
+- Voter presence is tracked in the backend Redux store and snapshotted per round. Early completion requires quorum across active snapshot voters within a 10 second disconnect grace window; broadcasts only expose sanitized headcount counts, never tokens or socket IDs.
 - Client Redux state is normalized as `{ list, activeSessionId, bySessionId }`. Keep session data under `bySessionId`, never promote it to the top level, and never let a token reach it. `normalizeSession` strips `voterToken`, `token`, `jwt`, `password`, and `secret`.
 
 ## Agent skills

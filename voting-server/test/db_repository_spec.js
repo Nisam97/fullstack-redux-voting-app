@@ -194,4 +194,96 @@ describe('MongoDB Repository Layer', () => {
       expect(notFound).to.be.null;
     });
   });
+
+  describe('Rounds Ledger Integrity (regression: TIE_PENDING ledger corruption)', () => {
+    const snapshot = (roundIndex, resolution, tally) => ({
+      roundIndex,
+      kind: 'single_ballot',
+      candidates: ['Alpha', 'Beta'],
+      tally,
+      totalVotes: Object.values(tally).reduce((a, b) => a + b, 0),
+      closedAt: new Date(),
+      resolution,
+      advanced: null
+    });
+
+    it('pushRoundToResult persists one row per round with the exact snapshot content', async () => {
+      await repository.pushRoundToResult(
+        'sess_ledger_1',
+        snapshot(1, 'runoff', { Alpha: 2, Beta: 2 }),
+        { title: 'Ledger One', entries: ['Alpha', 'Beta'] }
+      );
+      await repository.pushRoundToResult(
+        'sess_ledger_1',
+        snapshot(2, 'admin_pick', { Alpha: 1, Beta: 1 }),
+        { title: 'Ledger One' }
+      );
+
+      const doc = await repository.getResultBySessionId('sess_ledger_1');
+      const indexes = doc.rounds.map(r => r.roundIndex);
+      expect(indexes).to.deep.equal([1, 2]);
+      expect(doc.rounds[0].resolution).to.equal('runoff');
+      expect(doc.rounds[0].tally).to.deep.equal({ Alpha: 2, Beta: 2 });
+      expect(doc.rounds[1].resolution).to.equal('admin_pick');
+    });
+
+    it('pushRoundToResult is idempotent for a replayed round index', async () => {
+      await repository.pushRoundToResult('sess_ledger_2', snapshot(1, 'runoff', { Alpha: 2, Beta: 2 }), { title: 'L2' });
+      await repository.pushRoundToResult('sess_ledger_2', snapshot(1, 'runoff', { Alpha: 2, Beta: 2 }), { title: 'L2' });
+
+      const doc = await repository.getResultBySessionId('sess_ledger_2');
+      expect(doc.rounds).to.have.lengthOf(1);
+    });
+
+    it('pushRoundToResult corrects a stale row instead of duplicating or appending a ghost round', async () => {
+      await repository.pushRoundToResult('sess_ledger_3', snapshot(1, 'zero_vote_replay', {}), { title: 'L3' });
+      // The fresher closure for the same index carries the real frozen tally.
+      await repository.pushRoundToResult('sess_ledger_3', snapshot(1, 'runoff', { Alpha: 2, Beta: 2 }), { title: 'L3' });
+
+      const doc = await repository.getResultBySessionId('sess_ledger_3');
+      expect(doc.rounds).to.have.lengthOf(1);
+      expect(doc.rounds[0].resolution).to.equal('runoff');
+      expect(doc.rounds[0].tally).to.deep.equal({ Alpha: 2, Beta: 2 });
+    });
+
+    it('pushRoundToResult keeps the array ordered when an out of order index arrives', async () => {
+      await repository.pushRoundToResult('sess_ledger_4', snapshot(2, 'admin_pick', { Alpha: 1, Beta: 1 }), { title: 'L4' });
+      await repository.pushRoundToResult('sess_ledger_4', snapshot(1, 'runoff', { Alpha: 2, Beta: 2 }), { title: 'L4' });
+
+      const doc = await repository.getResultBySessionId('sess_ledger_4');
+      expect(doc.rounds.map(r => r.roundIndex)).to.deep.equal([1, 2]);
+    });
+
+    it('saveResult completion does not clobber rounds pushed after the document was created', async () => {
+      await repository.pushRoundToResult('sess_ledger_5', snapshot(1, 'runoff', { Alpha: 1, Beta: 1 }), { title: 'L5', entries: ['Alpha', 'Beta'] });
+      const before = await repository.getResultBySessionId('sess_ledger_5');
+      expect(before.rounds).to.have.lengthOf(1);
+
+      await repository.pushRoundToResult('sess_ledger_5', snapshot(2, 'admin_pick', { Alpha: 1, Beta: 1 }), { title: 'L5' });
+      await repository.saveResult({
+        sessionId: 'sess_ledger_5',
+        title: 'L5',
+        entries: ['Alpha', 'Beta'],
+        winner: 'Alpha',
+        completedAt: new Date()
+      });
+
+      const doc = await repository.getResultBySessionId('sess_ledger_5');
+      expect(doc.winner).to.equal('Alpha');
+      expect(doc.rounds.map(r => r.roundIndex)).to.deep.equal([1, 2]);
+      expect(doc.rounds[0].tally).to.deep.equal({ Alpha: 1, Beta: 1 });
+      expect(doc.rounds[1].resolution).to.equal('admin_pick');
+    });
+
+    it('saveResult creates the document exactly once under concurrent first writes', async () => {
+      await Promise.all([
+        repository.pushRoundToResult('sess_ledger_6', snapshot(1, 'runoff', { Alpha: 1, Beta: 1 }), { title: 'L6' }),
+        repository.saveResult({ sessionId: 'sess_ledger_6', title: 'L6', entries: ['Alpha', 'Beta'], winner: 'Alpha' })
+      ]);
+
+      const docs = await (await import('mongoose')).default.model('Result').find({ sessionId: 'sess_ledger_6' }).lean();
+      expect(docs).to.have.lengthOf(1);
+      expect(docs[0].winner).to.equal('Alpha');
+    });
+  });
 });

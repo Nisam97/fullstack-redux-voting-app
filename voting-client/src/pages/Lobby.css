@@ -113,6 +113,14 @@
   background: #94a3b8;
 }
 
+.lobby-badge-secured {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+}
+.lobby-badge-secured .lobby-badge-dot {
+  background: #38bdf8;
+}
+
 /* Headcount Banner */
 .lobby-headcount-box {
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);

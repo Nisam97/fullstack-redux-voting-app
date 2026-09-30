@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { generateJoinCode } from './utils/joinCode.js';
 
 export const DEFAULT_SESSION_ID = 'sess_default';
 export const DEFAULT_SESSION_TITLE = 'Danny Boyle Film Tournament';
@@ -76,12 +77,18 @@ export function bootstrapDefaultSession(store, options = {}) {
     return null;
   }
 
-  // 1. CREATE_SESSION
+  // 1. CREATE_SESSION (pendingExpiresAt deliberately omitted: seed sessions
+  // must never be TTL-deleted, and the partial index only expires documents
+  // that carry a pendingExpiresAt while status is pending). Callers with a
+  // database connection should pass options.joinCode from getUniqueJoinCode()
+  // so the code is checked against other pending and open sessions; without it
+  // a plain random code is used, which is safe before any sessions exist.
   store.dispatch({
     type: 'CREATE_SESSION',
     sessionId,
     title,
-    entries
+    entries,
+    joinCode: options.joinCode || generateJoinCode()
   });
 
   // 2. START_SESSION
@@ -138,12 +145,18 @@ export function bootstrapHorrorSession(store, options = {}) {
     return null;
   }
 
-  // 1. CREATE_SESSION
+  // 1. CREATE_SESSION (pendingExpiresAt deliberately omitted: seed sessions
+  // must never be TTL-deleted, and the partial index only expires documents
+  // that carry a pendingExpiresAt while status is pending). Callers with a
+  // database connection should pass options.joinCode from getUniqueJoinCode()
+  // so the code is checked against other pending and open sessions; without it
+  // a plain random code is used, which is safe before any sessions exist.
   store.dispatch({
     type: 'CREATE_SESSION',
     sessionId,
     title,
-    entries
+    entries,
+    joinCode: options.joinCode || generateJoinCode()
   });
 
   // 2. START_SESSION

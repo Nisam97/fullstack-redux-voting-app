@@ -205,21 +205,38 @@ export async function joinVoterSession({ sessionId, displayName }) {
       };
     }
 
+    if (data.status === 'pending_approval') {
+      return {
+        success: true,
+        status: 'pending_approval',
+        requestId: data.requestId,
+        message: data.message || 'Your join request is pending organizer approval.',
+        sessionId
+      };
+    }
+
     const voterToken = data.voterToken;
     const voterName = data.displayName;
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && voterToken) {
       const storage = window.sessionStorage || window.localStorage;
       if (storage) {
         storage.setItem(getVoterTokenKey(sessionId), voterToken);
-        storage.setItem(getVoterNameKey(sessionId), voterName);
+        if (voterName) {
+          storage.setItem(getVoterNameKey(sessionId), voterName);
+        }
       }
+    }
+
+    if (socket && typeof socket.emit === 'function' && voterToken) {
+      socket.emit('subscribe_session', { sessionId, voterToken });
     }
 
     return {
       success: true,
       voterToken,
       displayName: voterName,
+      displayNameSource: data.displayNameSource,
       voterCount: data.voterCount,
       sessionId
     };
@@ -243,5 +260,182 @@ export function clearVoterSession(sessionId) {
   if (storage) {
     storage.removeItem(getVoterTokenKey(sessionId));
     storage.removeItem(getVoterNameKey(sessionId));
+  }
+}
+
+// --- Passwordless Voter Account & OTP APIs ---
+
+/**
+ * Requests an OTP code to be sent to email.
+ *
+ * @param {Object} params
+ * @param {string} params.email
+ * @param {string} [params.name]
+ * @param {string} [params.username]
+ * @returns {Promise<{ success: boolean, message?: string, error?: string, retryAfterSeconds?: number }>}
+ */
+export async function requestOtp({ email, name, username }) {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/auth/otp/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, name, username })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'OTP_REQUEST_FAILED',
+        message: data.message || 'Failed to request verification code.',
+        retryAfterSeconds: data.retryAfterSeconds
+      };
+    }
+
+    return {
+      success: true,
+      message: data.message
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Failed to connect to authentication server.'
+    };
+  }
+}
+
+/**
+ * Verifies a 6-digit OTP code, sets vs_voter httpOnly cookie on backend,
+ * and returns user profile.
+ *
+ * @param {Object} params
+ * @param {string} params.email
+ * @param {string} params.code
+ * @returns {Promise<{ success: boolean, user?: Object, isNewUser?: boolean, error?: string, message?: string }>}
+ */
+export async function verifyOtp({ email, code }) {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/auth/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, code })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'VERIFY_FAILED',
+        message: data.message || 'Failed to verify code.',
+        remainingAttempts: data.remainingAttempts
+      };
+    }
+
+    return {
+      success: true,
+      user: data.user,
+      isNewUser: data.isNewUser
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Failed to connect to authentication server.'
+    };
+  }
+}
+
+/**
+ * Retrieves the current voter's profile using the vs_voter cookie.
+ *
+ * @returns {Promise<{ success: boolean, user?: Object, error?: string }>}
+ */
+export async function getVoterProfile() {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/auth/voter/me`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'UNAUTHORIZED'
+      };
+    }
+
+    return {
+      success: true,
+      user: data.user
+    };
+  } catch {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR'
+    };
+  }
+}
+
+/**
+ * Updates the voter's display name or username.
+ *
+ * @param {Object} params
+ * @param {string} [params.name]
+ * @param {string} [params.username]
+ * @returns {Promise<{ success: boolean, user?: Object, error?: string, message?: string }>}
+ */
+export async function updateVoterProfile({ name, username }) {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/auth/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, username })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'UPDATE_FAILED',
+        message: data.message || 'Failed to update profile.'
+      };
+    }
+
+    return {
+      success: true,
+      user: data.user
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Failed to connect to server.'
+    };
+  }
+}
+
+/**
+ * Logs out the voter by clearing the vs_voter cookie on the backend.
+ *
+ * @returns {Promise<{ success: boolean }>}
+ */
+export async function logoutVoter() {
+  try {
+    const response = await fetch(`${SERVER_URL}/api/auth/logout`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    const data = await response.json().catch(() => ({}));
+    return {
+      success: response.ok && Boolean(data.success)
+    };
+  } catch {
+    return { success: false };
   }
 }

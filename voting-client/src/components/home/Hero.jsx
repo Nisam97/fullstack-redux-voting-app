@@ -25,8 +25,8 @@ function Hero() {
 
           <div className="hero-buttons">
 
-            <Link to="/vote" className="hero-primary-btn">
-              Start Voting →
+            <Link to="/join" className="hero-primary-btn">
+              Join Session →
             </Link>
 
             <Link to="/results" className="hero-secondary-btn">

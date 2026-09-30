@@ -1,354 +1,409 @@
 # VoteSphere — Full-Stack Real-Time Pairwise Voting Application
 
 [![CI Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-338%2F338%20passing-brightgreen.svg)](#running-the-automated-test-suites)
-[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-280%2F280%20passing-brightgreen.svg)](#running-the-automated-test-suites)
-[![Total Tests](https://img.shields.io/badge/total%20tests-618%20tests-brightgreen.svg)](#running-the-automated-test-suites)
-[![ESLint](https://img.shields.io/badge/eslint-0%20errors-brightgreen.svg)](#running-the-automated-test-suites)
-[![Vite Build](https://img.shields.io/badge/vite%20build-passing-brightgreen.svg)](#running-the-automated-test-suites)
-[![Core Engine](https://img.shields.io/badge/core.js-protected%20pure-blue.svg)](#pure-tournament-engine)
+[![Backend Tests](https://img.shields.io/badge/backend%20tests-598%2F598%20passing-brightgreen.svg)](#testing--verification)
+[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-373%2F373%20passing-brightgreen.svg)](#testing--verification)
+[![Total Tests](https://img.shields.io/badge/total%20tests-971%20passing-brightgreen.svg)](#testing--verification)
+[![ESLint](https://img.shields.io/badge/eslint-0%20errors-brightgreen.svg)](#testing--verification)
+[![Vite Build](https://img.shields.io/badge/vite%20build-passing-brightgreen.svg)](#testing--verification)
+[![Core Engine](https://img.shields.io/badge/core.js-protected%20pure-blue.svg)](#architecture)
+
+VoteSphere is an enterprise-grade, real-time pairwise and single-ballot voting platform. Built with an authoritative backend architecture, VoteSphere eliminates voting fatigue and tactical distortion by breaking candidate pools down into head-to-head tournament matchups or clean single ballots, all synchronized live across connected voters via WebSockets and backed by durable MongoDB persistence.
 
 ---
 
-## Why VoteSphere?
+## Table of Contents
 
-In traditional voting systems, voters are overwhelmed by long candidate ballots, leading to tactical voting, cognitive fatigue, and split-vote anomalies. **VoteSphere** solves this by evaluating candidates through head-to-head pairwise matchups (`pair[0]` vs `pair[1]`). Round winners return to the candidate pool until an undisputed tournament champion emerges.
-
-All voting logic, tallies, round advancements, duplicate-vote protections, and participant headcounts are strictly governed by an **authoritative backend Redux engine**, keeping all connected clients reactively synchronized in real time via Socket.io rooms, with tournament metadata and completed outcomes durably archived in **MongoDB**.
-
----
-
-## Feature Implementation Status
-
-| Feature Domain | Implementation Status | Notes |
-|---|---|---|
-| **Multi-Session Tournament Engine** | `[x]` **IMPLEMENTED** | Isolated session registry, room routing, pure core math |
-| **Two-Tier Authentication (Feature 1)** | `[x]` **IMPLEMENTED** | Single admin JWT, frictionless session-scoped voter tokens, duplicate-vote blocking |
-| **MongoDB Persistence (Feature 4)** | `[x]` **IMPLEMENTED** | Async store subscriber persistence, models, startup recovery |
-| **Results History Archive (Feature 4)** | `[x]` **IMPLEMENTED** | REST history API, `/history` route, historical result presentation |
-| **Admin Panel & Waiting Room Lobby (Feature 3)** | `[x]` **IMPLEMENTED** | Dedicated `/admin` controls, pre-round `/lobby`, live headcount, QR code generation |
-| **Timer-Based Auto-Advancement (Feature 2)** | `[x]` **IMPLEMENTED** | Server-authoritative timer domain, duration 5–300s, auto `NEXT` dispatch |
-| **Real-Time Results Chart (Feature 5)** | `[x]` **IMPLEMENTED** | Recharts bar charts, guarded active round visibility, round invalidation |
-| **Admin Session Creation & Management (Feature 6)** | `[x]` **IMPLEMENTED** | Prominent creation modal, focused `[Manage]` dialog, two-step archive confirm, timer persistence |
-| **Early Round Completion (Feature 7)** | `[x]` **IMPLEMENTED** | Dual-path convergence (timer expiry or 100% voter turnout), idempotent `closeRoundOnce`, monotonic round identity |
-| **Round Results Lifecycle (Feature 8)** | `[x]` **IMPLEMENTED** | Monotonic lifecycle (`VOTING` → `ROUND_CLOSED` → `RESULTS_REVEALED` → `NEXT`), frozen `finalVote`, reveal timer |
+- [The Problem VoteSphere Solves](#the-problem-votesphere-solves)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Session Lifecycle](#session-lifecycle)
+- [Server-Authoritative Timer & Round Progression](#server-authoritative-timer--round-progression)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [API & WebSocket Protocol](#api--websocket-protocol)
+- [Testing & Verification](#testing--verification)
+- [Screenshots & UI Tour](#screenshots--ui-tour)
+- [License](#license)
 
 ---
 
-## Key Architectural Highlights
+## The Problem VoteSphere Solves
 
-* **Round Results Lifecycle & Frozen Results (Feature 8)**:
-  * **Dedicated Results Reveal Window**: Decouples round closure from immediate tournament progression, inserting intermediate `ROUND_CLOSED` and `RESULTS_REVEALED` phases with an authoritative reveal countdown.
-  * **Frozen Results Snapshot (`finalVote`)**: Server freezes an immutable `{ pair, tally, closedAt }` snapshot upon round closure, ensuring the UI displays stable, uncorrupted outcomes during the reveal window.
-  * **Authoritative Reveal Timer**: `TimerManager` manages reveal countdowns (`status: 'revealing'`), enforcing timer exclusivity (voting and reveal timers never run concurrently).
-  * **Absolute Server Authority**: The frontend countdown is purely visual; zero client `NEXT` dispatching occurs when the countdown reaches `00:00`.
-  * **Closed-Round Vote Rejection**: Votes submitted during `ROUND_CLOSED` or `RESULTS_REVEALED` are safely rejected with `action_error: { action: 'VOTE', error: 'ROUND_CLOSED' }`.
-* **Early Round Completion & Dual Convergence (Feature 7)**:
-  * **Dual Convergence Architecture**: A voting round ends authoritatively either when the server timer expires OR when all currently eligible registered voters submit valid ballots.
-  * **Monotonic Round Identity**: Identifies rounds as `${sessionId}:::r${roundIndex}`, incrementing per session on every pair change to isolate brackets even if candidate pairs recur.
-  * **Pre-Participation Validation**: Authentication, session status, active pair, and candidate selection are verified *before* participation is recorded.
-  * **Dynamic Voter Eligibility**: Derived from `getVoterCount(sessionId)`; requires minimum 2 voters, protects zero-voter sessions from premature advancement, and adapts if voters join mid-round.
-  * **Idempotent Closure Gate (`closeRoundOnce`)**: Funnels both final vote and timer expiry through a single idempotent closure function, disarming active timers, preventing duplicate `NEXT` dispatches, and rejecting stale callbacks.
-  * **Strict Frontend Server Authority**: Frontend operates purely reactively, never calculating quorum or dispatching `NEXT`.
-* **Admin Management Panel & Lifecycle Authority (Feature 3)**:
-  * **Dedicated Admin Dashboard**: Authenticated control center at `/admin` protected by `AdminGuard` and JWT validation.
-  * **Session Creation**: Full session setup supporting custom or auto-generated session IDs/slugs, title validation, candidate entry sanitization, duplicate pruning, and collision prevention.
-  * **Strict Socket.io Authority**: Authoritative tournament lifecycle operations (`CREATE_SESSION`, `START_SESSION`, `NEXT`, `ARCHIVE_SESSION`) run strictly through the authenticated WebSocket action pipeline. There are zero competing REST lifecycle mutation endpoints.
-  * **Share & QR Generation**: Generates shareable participant lobby URLs (`/sessions/:id/lobby`) with instant client-side QR code rendering via `qrcode`. QR codes and URLs contain clean, safe routing links without embedding voter tokens, admin JWTs, or secrets.
-* **Participant Waiting Room Lobby & Live Headcount (Feature 3)**:
-  * **Direct Access & Hydration**: Direct landing at `/sessions/:id/lobby` immediately hydrates session metadata and participant counts via `GET /api/sessions/:id/lobby`.
-  * **Frictionless Join**: Participants enter a cosmetic display name and receive a cryptographically secure, session-scoped voter token.
-  * **Authoritative Live Headcount**: Active voters are tracked in the backend in-memory voter registry and broadcast in real time across the room via `lobby_update` Socket.io events.
-  * **Automated Tournament Entry**: When the administrator starts the session (`pending` → `open`), the Waiting Room automatically transitions joined participants into the pairwise voting arena (`/sessions/:id/vote`).
-  * **Completed & Archived Handling**: Concluded or archived lobbies gracefully inform participants and redirect to historical results.
-* **Two-Tier Authentication Model (Feature 1)**:
-  * **Tier 1 (Admin)**: Exactly one global administrator seeded from environment configuration (`ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`), bcrypt-hashed passwords (`saltRounds = 10`), and signed JSON Web Tokens (JWT) authorizing tournament lifecycle actions.
-  * **Tier 2 (Voter)**: Frictionless session joining requiring only a cosmetic display name (no password, email, or OTP). The server issues an unguessable session-scoped token (`crypto.randomUUID()`) delivered via JSON and cookie (`voter_token_${sessionId}`).
-* **Server-Authoritative Vote Security & Duplicate-Vote Prevention**:
-  * Anonymous voting is strictly rejected (`VOTER_TOKEN_REQUIRED`).
-  * The server constructs a unique composite key for each ballot: `${sessionId}:::${sortedPair}:::${voterToken}`.
-  * Duplicate votes within the same active pairwise round are blocked authoritatively (`DUPLICATE_VOTE`).
-  * When a round advances, the active pair changes, automatically unlocking the voter for the new matchup without re-joining.
-  * Duplicate display names are fully supported; each voter receives an independent token and votes independently.
-* **MongoDB Persistence & Startup Recovery (Feature 4)**:
-  * Non-blocking Redux store subscriber hooks into state transitions to persist session metadata, status changes, and completed tournament outcomes asynchronously.
-  * Protection of initial candidate entries lists ensures that pairwise queue reductions during rounds do NOT overwrite the full contestant roster.
-  * Safe startup recovery resets interrupted `open` sessions back to `pending` and restores active sessions into Redux.
-  * Idempotent atomic upserts prevent duplicate `Result` records.
-* **Results History & Historical Viewing (Feature 4)**:
-  * Public REST history API (`GET /api/sessions/history` and `GET /api/sessions/:sessionId/result`) delivers completed tournament outcomes with original contestant rosters.
-  * Frontend isolates archival records in `state.history` from volatile real-time state in `state.sessions`.
-  * Dedicated `/history` archive page features loading, error/retry, empty, and populated tournament card grid views.
-  * `/sessions/:id/results` gracefully falls back to MongoDB history if a concluded session is no longer in active server memory.
-* **Protected Pure Tournament Engine**:
-  * [`voting-server/src/core.js`](file:///d:/Mine_project/fullstack-redux-voting-app/voting-server/src/core.js) is a 40-line pure, immutable domain module. It remains 100% unmodified (SHA-256: `B479F3F0B90C5BD81E1A813B3C5753179EFEECD08A531AA833000B65188FB310`). Authentication, persistence, lobby headcount, and networking wrap around this engine as external protective layers.
-* **Multi-Session Room Isolation**:
-  * Hosts concurrent independent tournament sessions (e.g., `sess_default`, `sess_horror`).
-  * Socket.io distributes state via lightweight global registry summaries (`'sessions'`) and room-scoped state streams (`'session_state'`, `'lobby_update'`).
-  * Actions and voter headcounts in Session A never leak into or mutate Session B.
+In traditional multi-candidate elections and polls, participants are confronted with long, monolithic ballots. This routinely causes:
+- **Cognitive Fatigue:** Voters lose patience and resort to random selections or default to the first candidate.
+- **Strategic / Tactical Voting:** Voters cast ballots against contenders rather than for their actual preferences to avoid split votes.
+- **Split-Vote Anomalies:** Similar candidates divide the vote share, allowing an unrepresentative alternative to win.
+
+**VoteSphere solves this** through head-to-head pairwise elimination tournament matchups (`pair[0]` vs `pair[1]`). Round winners return to the candidate pool until an undisputed tournament champion emerges. For smaller contests (≤ 6 candidates), VoteSphere seamlessly supports a **Single-Ballot** plurality mode with built-in instant tie runoff mechanics.
+
+All mathematical operations, vote tabulations, round advancements, duplicate-ballot prevention, and quorum determinations run exclusively on the **authoritative backend Redux engine**. Connected clients operate purely as reactive presentation layers.
 
 ---
 
-## Application Route Structure
+## Key Features
 
-### Modern Frontend Routes (Port 5173)
-* `/admin`: Administrative Management Panel (protected by `AdminGuard`; session creation, lifecycle controls, QR share).
-* `/sessions`: Public Session Discovery Catalog (active and completed session listing).
-* `/sessions/:id/lobby`: Participant Waiting Room Lobby (pre-round join, live headcount, automated start redirect).
-* `/sessions/:id/vote`: Pairwise Voting Arena (head-to-head matchup voting).
-* `/sessions/:id/results`: Live Tournament Results & Podium (real-time percentage bars and winner presentation).
-* `/history`: Completed Tournament Results Archive (paginated historical tournament records).
-* `/login`: Administrator Login Portal (JWT authentication).
+### 1. Dual Voting Modes
+- **Pairwise Tournament Mode:** Head-to-head elimination bracket where candidate pairs compete sequentially until an undisputed champion is determined.
+- **Single-Ballot Mode:** Automatic direct ballot for pools with 2 to 6 candidates (`SINGLE_BALLOT_MAX = 6`) with instant plurality detection.
 
-### Compatibility & Legacy Routes
-* `/dashboard` → Redirects to `/admin` (Administrator Dashboard)
-* `/elections` → Redirects to `/sessions` (Session Catalog)
-* `/vote` → Redirects to active session or fallback `/sessions/sess_default/vote`
-* `/results` → Redirects to active session or fallback `/sessions/sess_default/results`
+### 2. Monotonic Round Results Lifecycle
+- Every round transitions through four deterministic phases:
+  $$\text{VOTING} \longrightarrow \text{ROUND\_CLOSED} \longrightarrow \text{RESULTS\_REVEALED} \longrightarrow \text{NEXT}$$
+- **Frozen Results Snapshot (`finalVote`):** When a round closes, an immutable `{ pair, tally, closedAt }` snapshot is frozen. Live tallies are never leaked to participants while voting is active.
+- **Dedicated Reveal Countdown:** Authoritative reveal countdown (`ROUND_REVEAL_DURATION`, default 10s) gives participants time to review round outcomes before the server transitions to the next round.
+
+### 3. Server-Authoritative Tie Resolution Ladder
+- **First Tie:** Triggers an immediate rematch in tournament mode, or a runoff ballot featuring only the tied candidates in single-ballot mode.
+- **Second Consecutive Tie:** Transitions to `TIE_PENDING`, arming a 30-second admin window allowing the session host to select a winner (`RESOLVE_TIE`). If the timer expires before an admin acts, an automated cryptographic coin flip resolves the tie authoritatively.
+- **Zero-Vote Handling:** If zero votes are submitted, the round replays once with a warning; if zero votes recur, the match terminates safely as `no_result`.
+
+### 4. Dual-Path Early Round Completion
+- A round completes immediately upon **either**:
+  1. The authoritative round countdown reaches `00:00`, or
+  2. 100% of currently eligible active voters submit valid ballots.
+- Dynamic eligibility accounts for disconnects within a 10-second grace window (`GRACE_PERIOD_MS = 10000`).
+
+### 5. Multi-Session Room Isolation
+- Supports unlimited concurrent sessions (e.g. `sess_annual_2026`, `sess_team_lunch`).
+- Socket.io room partitioning (`session:${sessionId}`) guarantees state updates, chat, timers, and participants in Session A never bleed into Session B.
+
+### 6. Two-Tier Identity & Access Controls
+- **Public Sessions:** Frictionless participation via display name; session-scoped cryptographic voter token (`crypto.randomUUID()`) delivered via JSON and cookie.
+- **Secured Sessions:** Verified voter accounts with passwordless Email + OTP (One-Time Password) authentication. Supports allowlists (`whoCanJoin: "allowlist"`) and manual host admission queues (`whoCanJoin: "approval"`).
+- **Session Administrator:** JWT-authenticated host portal at `/admin` for session setup, lifecycle triggers, participant approvals, and real-time QR generation.
+
+### 7. Guaranteed Duplicate Vote Prevention
+- The backend tracks ballots on a composite round-scoped key:
+  $$\text{Key} = \$\{\text{sessionId}\} ::: \$\{\text{roundId}\} ::: \$\{\text{sortedPair}\} ::: \$\{\text{voterToken}\}$$
+- Prevents ballot stuffing and replay attacks. When a candidate pair advances or rematches in a subsequent round, `roundId` increments monotonically, unlocking eligible voters for the new round without requiring re-authentication.
+
+### 8. MongoDB Persistence & Automatic Startup Recovery
+- Non-blocking Redux store subscriber streams session metadata, participant rosters, and tournament results asynchronously to MongoDB.
+- Protects original candidate rosters from pairwise queue reduction.
+- Automatic recovery resets interrupted `open` sessions to `pending` on backend boot, restoring active tournaments cleanly into Redux memory.
+
+### 9. Public Results History Archive
+- Public REST endpoints (`GET /api/sessions/history` and `GET /api/sessions/:sessionId/result`) serve completed tournaments, final champions, candidate rosters, and round-by-round tally histories.
 
 ---
 
-## Verified Baseline Quality Metrics
+## Architecture
 
-All test suites and code quality checks have been verified on branch `develop1`:
+VoteSphere follows a **Server-Authoritative Flux & Clean Architecture** model:
+
+```mermaid
+flowchart TD
+    subgraph Client["Frontend Client (React 19 + Redux Toolkit)"]
+        UI[UI Components & Views]
+        RTK[Normalized Redux Store]
+        SocketClient[Socket.io Client Singleton]
+        UI --> RTK
+        RTK --> SocketClient
+    end
+
+    subgraph Server["Authoritative Backend (Node.js + Redux 5)"]
+        SocketServer[Socket.io Server]
+        AuthPipeline[JWT & Voter Token Ingress Guard]
+        ReduxStore[Redux Store over Immutable.js]
+        CoreEngine[core.js Pure Engine]
+        TimerMgr[TimerManager Domain]
+        Subscriber[Store Change Subscriber]
+
+        SocketServer --> AuthPipeline
+        AuthPipeline --> ReduxStore
+        ReduxStore --> CoreEngine
+        ReduxStore --> TimerMgr
+        TimerMgr -.->|Auto NEXT| ReduxStore
+        ReduxStore --> Subscriber
+    end
+
+    subgraph Database["MongoDB Storage (Mongoose 9)"]
+        Persistence[Persistence Layer]
+        Collections[(Sessions / Results / Users)]
+        Subscriber --> Persistence
+        Persistence --> Collections
+    end
+
+    SocketClient <==>|Real-Time WebSockets| SocketServer
+    UI -.->|REST Queries| SocketServer
+    Subscriber -.->|State Broadcasts| SocketServer
+```
+
+### Architectural Guarantees
+1. **The Server is Authoritative:** The client is purely a reactive view engine. The frontend never computes tallies, checks quorum, breaks ties, or triggers `NEXT`.
+2. **Protected Pure Core (`core.js`):** The mathematical tournament core (`voting-server/src/core.js`) is an immutable, pure function module strictly preserved with a pinned SHA-256 hash (`b479f3f0b90c5bd81e1a813b3c5753179efeecd08a531aa833000b65188fb310`).
+3. **Sequential Database Writes:** Dedicated write queues per session (`enqueueSessionWrite`) eliminate out-of-order document transitions between concurrent lifecycle dispatches and MongoDB upserts.
+
+---
+
+## Technology Stack
+
+| Layer | Technologies & Libraries |
+|---|---|
+| **Frontend** | React 19, Redux Toolkit 2.x, React Router 7.x, Recharts 3.x, Lucide React, QRCode, Vanilla CSS Modules |
+| **Frontend Tooling** | Vite 8.x, ESLint 10.x, Node test runner (`node:test`) |
+| **Backend Runtime** | Node.js 18+ (verified on Node 22 & 24), ECMAScript Modules (`type: module`), Babel register |
+| **Backend State & Core** | Redux 5.x, Immutable.js 3.x, Pinned Pure Functional Core Engine |
+| **Real-Time Communication** | Socket.io 4.x (WebSocket transport with long-polling fallback) |
+| **Database & ODM** | MongoDB 6.0+, Mongoose 9.x |
+| **Security & Auth** | JSON Web Tokens (`jsonwebtoken`), Bcrypt password hashing (`bcrypt`), HttpOnly cookies |
+| **Email & Delivery** | Nodemailer 10.x (SMTP transport with safe console fallback for dev) |
+| **Testing Frameworks** | Mocha 10.x, Chai 4.x, Chai-Immutable, `mongodb-memory-server` 11.x, `node:test` |
+
+---
+
+## Project Structure
 
 ```text
-================================================================================
-VERIFIED BASELINE SUMMARY: FEATURE 6 (ADMIN SESSION CREATION & MANAGEMENT)
-================================================================================
-* Backend Unit & Integration Tests: 254 / 254 PASSING (0 failing across 27 spec files)
-  - test/auth_spec.js:              28 passing (Admin auth, voter tokens, duplicate vote, socket, REST)
-  - test/bootstrap_spec.js:          9 passing (Entries loading, seed sessions)
-  - test/core_spec.js:               5 passing (Pure core voting mathematics)
-  - test/db_connection_spec.js:      3 passing (MongoDB connect, disconnect, isConnected)
-  - test/db_models_spec.js:         10 passing (Mongoose schemas, validation, timerDuration, indexes)
-  - test/db_repository_spec.js:     10 passing (CRUD operations, session recovery, monotonic status guard)
-  - test/history_api_spec.js:       18 passing (REST history endpoints, pagination, limits, errors)
-  - test/immutable_spec.js:          1 passing (Immutable.js tree structures)
-  - test/lobby_headcount_spec.js:   21 passing (Headcount tracking, GET /lobby, GET /sessions, room isolation)
-  - test/persistence_spec.js:       18 passing (State diffing, recovery, timerDuration persistence, seeds)
-  - test/reducer_spec.js:            6 passing (Legacy reducer compatibility)
-  - test/server_spec.js:            24 passing (Socket.io multi-session room isolation)
-  - test/sessions_reducer_spec.js:  36 passing (Session registry lifecycle, timerDuration contract)
-  - test/store_spec.js:              1 passing (Redux store configuration)
-  - test/test_helper.js:             1 passing (Test environment baseline)
-  - test/timer_spec.js:             15 passing (TimerManager unit tests, boundaries, callbacks)
-  - test/timer_integration_spec.js: 17 passing (Socket.io room isolation, hydration, auto-advance)
-  - Additional regression suites:   32 passing (Multi-client helper and regression suites)
-
-* Frontend Unit & Integration Tests: 252 / 252 PASSING (0 failing across 18 spec files)
-  - test/admin_workflow_spec.js:    17 passing (Feature 6 modal creation, manage lifecycle controls, archive confirm)
-  - test/admin_timer_spec.js:       22 passing (Admin timer input validation, payload, live countdown display)
-  - test/auth_spec.js:               7 passing (Admin state, voter token scoping, token middleware)
-  - test/countdown_timer_spec.js:   13 passing (Countdown rendering, urgency states, accessibility)
-  - test/history_spec.js:           11 passing (History service, async thunks, Redux selectors)
-  - test/results_chart_spec.js:     15 passing (ResultsChart Recharts rendering, tooltip, accessible table)
-  - test/results_hardening_spec.js: 29 passing (Hardened active/closed states, multi-session isolation)
-  - test/results_spec.js:            7 passing (Phase 6 results presentation & authoritativeness)
-  - test/results_transition_spec.js: 16 passing (Round N -> Round N+1 stale data invalidation, React round keys)
-  - test/results_visibility_spec.js: 18 passing (Active round guarding, closed round reveal, presentation models)
-  - test/stage_c_spec.js:           14 passing (Redux voterCount, lobby_update, admin guard, unknown session)
-  - test/stage_d_spec.js:           17 passing (Admin panel actions, lifecycle controls, QR code generation)
-  - test/stage_e_spec.js:           15 passing (Lobby UI, display-name join, live headcount, session isolation)
-  - test/timer_expiry_spec.js:      16 passing (Vote guarding on expiry, inline feedback alert)
-  - test/timer_redux_spec.js:       15 passing (Redux timer slice, session normalization, selectors)
-  - test/timer_utils_spec.js:       18 passing (Time formatting, countdown calculations, expiry logic)
-  - test/voting_spec.js:            37 passing (Stages F, G, H multi-session state, socket, routing)
-  - Additional regression suites:     5 passing (Multi-client verification and router regression)
-
-* Total Automated Tests:             506 / 506 PASSING (0 failing across full-stack suite)
-* Frontend Code Quality:             0 ERRORS, 0 WARNINGS (eslint .)
-* Frontend Production Bundle:        SUCCESS (vite build, built cleanly, 0 errors)
-* Protected Engine Verification:     core.js UNTOUCHED (SHA-256 b479f3f0b90c5bd81e1a813b3c5753179efeecd08a531aa833000b65188fb310)
-* Multi-Session & Auth Regression:   100% PASSING (complete cross-session, room, and security isolation)
-================================================================================
+fullstack-redux-voting-app/
+├── .env.example                     # Environment template with documented defaults
+├── .gitignore                       # Clean Git exclusion rules
+├── AGENTS.md                        # Context and architecture guidelines
+├── docs/                            # Specifications and architectural design notes
+│   ├── ARCHITECTURE.md              # In-depth architectural documentation
+│   ├── API_CONTRACT.md              # REST & Socket event schemas
+│   ├── VOTESPHERE_FULL_SPEC.md      # Comprehensive product specification
+│   ├── specs/                       # Numbered feature specifications (0001-0005)
+│   └── reviews/                     # Verification audits & review logs
+├── voting-client/                   # React 19 Frontend Application
+│   ├── package.json                 # Client dependencies and npm scripts
+│   ├── vite.config.js               # Vite build configuration
+│   ├── src/
+│   │   ├── components/              # Reusable UI components (Navbar, Timer, Charts)
+│   │   ├── pages/                   # Route views (Admin, Lobby, Voting, Results, Join)
+│   │   ├── redux/                   # Redux Toolkit store, voteSlice, voterAuthSlice
+│   │   ├── routes/                  # App routing hierarchy
+│   │   └── services/                # Socket.io connection and REST API clients
+│   └── test/                        # 27 node:test specification suites (373 tests)
+└── voting-server/                   # Authoritative Backend Engine
+    ├── package.json                 # Server dependencies and npm scripts
+    ├── index.js                     # Server entrypoint and MongoDB connection
+    ├── src/
+    │   ├── core.js                  # PURE, PROTECTED tournament engine (do not edit)
+    │   ├── reducer.js               # Root multi-session Redux reducer
+    │   ├── server.js                # HTTP server, Socket.io protocol, ingress guards
+    │   ├── timer.js                 # TimerManager authoritative round clock
+    │   ├── roundManager.js          # Monotonic round results lifecycle coordinator
+    │   ├── ballot.js                # Single-ballot plurality and runoff engine
+    │   ├── auth/                    # Admin JWT, voter tokens, OTP, voter cookies
+    │   ├── db/                      # Mongoose connection, models, repository, persistence
+    │   └── email/                   # Nodemailer OTP email transporter
+    └── test/                        # 32 Mocha test suites (598 tests)
 ```
 
 ---
 
-## Quick Start
+## Session Lifecycle
+
+Sessions follow a strict, monotonic four-stage lifecycle:
+
+```text
+    [ CREATE_SESSION ]
+            │
+            ▼
+       ┌─────────┐
+       │ pending │ ◄── Waiting room lobby, participant check-in, QR code sharing
+       └────┬────┘
+            │ [ START_SESSION ] (Admin only)
+            ▼
+       ┌─────────┐
+       │  open   │ ◄── Active voting rounds, countdown timer, live matchup brackets
+       └────┬────┘
+            │ [ Final Winner Determined / All Pairs Concluded ]
+            ▼
+       ┌───────────┐
+       │ completed │ ◄── Podium view, candidate vote totals, archived into MongoDB
+       └────┬──────┘
+            │ [ ARCHIVE_SESSION ] (Admin two-step confirmation)
+            ▼
+       ┌──────────┐
+       │ archived │ ◄── Read-only archival; in-memory voter tokens safely freed
+       └──────────┘
+```
+
+- **`pending`:** The session is created. Participants can join the lobby (`/sessions/:id/lobby`), enter display names or authenticate, and see live connected counts. Voting is disabled.
+- **`open`:** The tournament is live. Pairwise matchups or single ballots are presented to voters. Rounds progress authoritatively through `VOTING` → `ROUND_CLOSED` → `RESULTS_REVEALED`.
+- **`completed`:** All matchups have concluded and an official winner has emerged. Results are frozen and committed to the MongoDB `results` collection.
+- **`archived`:** The session has been retired by an administrator. Memory cleanup disposes of in-memory participant maps and vote records.
+
+---
+
+## Server-Authoritative Timer & Round Progression
+
+1. **Default Duration:** 30 seconds per round (`VOTE_TIMER_DURATION=30`).
+2. **Configurable Range:** 5 seconds to 300 seconds (enforced at session creation).
+3. **Server Authority:** Timers run strictly inside the backend `TimerManager`. Client countdowns are visual estimates synchronized on `timer_state` events.
+4. **On Timer Expiry:**
+   - The server closes the round authoritatively.
+   - Any ballot submitted after expiry is rejected with `action_error: { error: 'ROUND_CLOSED' }`.
+   - The server freezes the outcome into `finalVote` and broadcasts `ROUND_CLOSED`.
+   - The reveal countdown (`ROUND_REVEAL_DURATION`, default 10s) begins.
+   - Upon reveal expiration, the backend dispatches `NEXT` into Redux, loading the next pair or concluding the championship.
+
+---
+
+## Getting Started
 
 ### Prerequisites
-* **Node.js**: v18.0.0 or higher (verified on Node.js v24 LTS).
-* **Package Manager**: `npm` v9 or higher.
-* **MongoDB**: v6.0+ (running locally on port 27017 or remote MongoDB URI).
-* **Ports**: `8090` (Backend API & Socket.io), `5173` (Frontend Vite Client).
+- **Node.js:** v18.0.0 or higher (tested on Node 18, 20, 22, and 24 LTS)
+- **MongoDB:** v6.0+ (running locally on port 27017 or a remote MongoDB connection string)
+- **Package Manager:** `npm` v9 or higher
 
-### 1. Configure Environment Variables
-Copy the environment template in the project root:
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Nisam97/fullstack-redux-voting-app.git
+cd fullstack-redux-voting-app
+```
+
+### 2. Configure Environment Variables
+Copy the example environment configuration into `.env` at the project root:
 ```bash
 cp .env.example .env
 ```
-Safe placeholder configuration:
+*(Review and customize values in `.env` if using a remote MongoDB cluster or customized credentials).*
+
+### 3. Install Dependencies
+VoteSphere uses two clean packages without monorepo tooling:
 ```bash
-PORT=8090
-MONGODB_URI=mongodb://localhost:27017/votesphere_dev
-JWT_SECRET=change_this_to_a_secure_random_secret_in_production
-JWT_EXPIRES_IN=24h
-ADMIN_USERNAME=admin
-ADMIN_EMAIL=admin@votesphere.local
-ADMIN_PASSWORD=adminPassword123!
+# Install backend dependencies
+cd voting-server && npm install
+
+# Install frontend dependencies
+cd ../voting-client && npm install
 ```
 
-### 2. Start the Backend Server (Port 8090)
+### 4. Start the Application
+Open two terminal windows:
+
+**Terminal 1 — Backend Server (Port 8090):**
 ```bash
 cd voting-server
-npm install
 npm start
 ```
-*Connects to MongoDB, initializes Redux store, recovers non-archived sessions from DB, seeds single admin, bootstraps and persists seed sessions (`sess_default` and `sess_horror`), and binds Socket.io to port 8090.*
+*Starts the Node HTTP server, connects to MongoDB, recovers active sessions, and initializes Socket.io on port 8090.*
 
-### 3. Start the Frontend Client (Port 5173)
+**Terminal 2 — Frontend Client (Port 5173):**
 ```bash
 cd voting-client
-npm install
 npm run dev
 ```
-*Open `http://localhost:5173` in any modern evergreen browser.*
+*Vite starts the modern frontend interface at `http://localhost:5173`.*
 
 ---
 
-## Running the Automated Test Suites
+## Environment Variables
 
-### Backend Tests (298 Tests)
+All settings are configured via `.env` in the root folder. The backend automatically reads this file on startup:
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `PORT` | `8090` | HTTP and WebSocket port for the backend server |
+| `MONGODB_URI` | `mongodb://localhost:27017/votesphere_dev` | MongoDB connection URI |
+| `JWT_SECRET` | *Random secret string* | Secret key for signing administrative JSON Web Tokens |
+| `JWT_EXPIRES_IN` | `24h` | Admin JWT expiration duration |
+| `ADMIN_USERNAME` | `admin` | Seeded administrator username |
+| `ADMIN_EMAIL` | `admin@votesphere.local` | Seeded administrator email address |
+| `ADMIN_PASSWORD` | `adminPassword123!` | Seeded administrator password (bcrypt hashed on boot) |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed browser origins for credentials |
+| `CLIENT_ORIGIN` | `http://localhost:5173` | Explicit frontend origin for Cookie reflection |
+| `COOKIE_SECURE` | `false` | Set to `true` in production with HTTPS |
+| `TRUST_PROXY` | `false` | Enable only behind reverse proxies to prevent IP spoofing |
+| `VOTER_JWT_SECRET` | *Random secret string* | Secret used to sign `vs_voter` authentication cookies |
+| `VOTER_SESSION_DAYS` | `7` | Lifetime of voter authentication session (days) |
+| `SMTP_HOST` | *(empty)* | SMTP host for email OTP. If empty, OTPs print to console |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | *(empty)* | SMTP username |
+| `SMTP_PASS` | *(empty)* | SMTP password |
+| `MAIL_FROM` | `noreply@votesphere.local` | From address for outgoing voter OTP emails |
+| `OTP_TTL_MINUTES` | `10` | One-time password expiration window (minutes) |
+| `VOTE_TIMER_DURATION` | `30` | Default round duration in seconds (5–300) |
+| `ROUND_REVEAL_DURATION`| `10` | Results reveal countdown window in seconds |
+| `VITE_SERVER_URL` | `http://localhost:8090` | *(Frontend)* Target backend WebSocket and API address |
+
+---
+
+## API & WebSocket Protocol
+
+### HTTP REST Endpoints
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| `POST` | `/api/admin/login` | Public | Authenticates admin credentials, returns JWT token |
+| `GET` | `/api/auth/me` | Admin | Validates admin JWT bearer header |
+| `GET` | `/api/sessions` | Public | Lists session catalog summaries |
+| `GET` | `/api/sessions/:id/lobby` | Public | Hydrates lobby metadata, status, and connected headcount |
+| `POST` | `/api/sessions/:id/join` | Public | Enrolls a voter with display name, returns session-scoped token |
+| `GET` | `/api/sessions/history` | Public | Retrieves paginated historical tournament completions |
+| `GET` | `/api/sessions/:id/result` | Public | Retrieves specific completed tournament outcome and full roster |
+| `GET` | `/api/sessions/:id/rounds` | Public | Retrieves round-by-round tally history (revealed rounds only) |
+| `POST` | `/api/auth/voter/request-otp` | Public | Requests a 6-digit OTP code for secured sessions |
+| `POST` | `/api/auth/voter/verify-otp` | Public | Verifies OTP code and sets session authentication cookie |
+| `GET` | `/api/auth/voter/me` | Voter | Returns current voter profile from authentication cookie |
+
+### Socket.io Real-Time Events
+
+| Event | Direction | Payload Description |
+|---|---|---|
+| `subscribe_session` | Client → Server | `{ sessionId, voterToken? }` Subscribes to room and records presence |
+| `unsubscribe_session`| Client → Server | `{ sessionId }` Unsubscribes from room and updates presence |
+| `action` | Client → Server | Redux action dispatch (`VOTE`, `NEXT`, `CREATE_SESSION`, `START_SESSION`, `RESOLVE_TIE`, etc.) |
+| `sessions` | Server → Client | Global registry summary updates |
+| `session_state` | Server → Client | Authoritative room state (`pair`, `status`, `roundLifecycle`, `finalVote`) |
+| `lobby_update` | Server → Client | Live connected headcount and session status |
+| `presence_update` | Server → Client | Real-time active voter headcount in session room |
+| `timer_state` | Server → Client | Authoritative clock state (`duration`, `remaining`, `expiresAt`, `status`) |
+| `tie_pending` | Server → Client | Armed tie-resolution state for tied matchups |
+| `action_error` | Server → Client | Feedback on unauthorized, duplicate, or invalid actions |
+
+---
+
+## Testing & Verification
+
+VoteSphere maintains comprehensive test coverage across both frontend and backend packages:
+
+### Execute Backend Test Suite
 ```bash
 cd voting-server
 npm test
 ```
+**Results:** **598 passing** (0 failing across 32 spec files in Mocha).
 
-### Frontend Tests (262 Tests)
+### Execute Frontend Test Suite
 ```bash
 cd voting-client
 npm test
 ```
+**Results:** **373 passing** (0 failing across 27 spec files in Node test runner).
 
-### Frontend Linting & Production Build
+### Code Quality & Production Build
 ```bash
 cd voting-client
-npm run lint
-npm run build
+npm run lint    # ESLint verification: 0 errors, 0 warnings
+npm run build   # Production Vite bundle: built cleanly in ~6 seconds
 ```
 
----
-
-## API & Communication Overview
-
-### HTTP REST Endpoints (Port 8090)
-* `POST /api/admin/login`: Authenticates administrator with identifier (username or email) and password; returns signed JWT.
-* `POST /api/sessions/:sessionId/join`: Accepts `{ displayName }`, validates session, issues random session-scoped voter token, and sets session cookie.
-* `GET /api/auth/me`: Validates `Authorization: Bearer <token>` and returns admin profile.
-* `GET /api/sessions`: Public session discovery catalog returning summary array (`id`, `title`, `status`, `entriesCount`, `voterCount`).
-* `GET /api/sessions/:sessionId/lobby`: Pre-round metadata hydration endpoint returning public session info and live `voterCount`.
-* `GET /api/sessions/history`: Retrieves paginated list of completed tournament outcomes (`limit` param, default: 50, max: 100).
-* `GET /api/sessions/:sessionId/result`: Retrieves completed tournament outcome and full candidate roster for a specific session ID.
-* `GET /api/sessions/:sessionId/history`: Identical route alias for `/api/sessions/:sessionId/result`.
-
-### Socket.io Real-Time Protocol (Port 8090)
-* `admin_login`: Authenticates admin over WebSocket.
-* `join_session`: Registers voter over WebSocket.
-* `subscribe_session` / `unsubscribe_session`: Room membership management (`session:${sessionId}`).
-* `sessions`: Registry summary query and broadcast stream.
-* `session_state`: Authoritative room-scoped state updates (pairs, tallies, winner).
-* `lobby_update`: Room-scoped event broadcasting live session headcount and metadata changes (`{ sessionId, voterCount, status, title }`).
-* `action`: Action ingress handler enforcing JWT validation on admin actions (`CREATE_SESSION`, `START_SESSION`, `ARCHIVE_SESSION`, `SET_ENTRIES`, `NEXT`) and duplicate-vote validation on `VOTE`.
-* `action_error`: Emitted to client on unauthorized or rejected actions (`UNAUTHORIZED`, `INVALID_TOKEN`, `VOTER_TOKEN_REQUIRED`, `DUPLICATE_VOTE`).
+**Overall Verified Status:** **971 automated tests passing**, 0 failing, 0 lint warnings.
 
 ---
 
-## Project Documentation Index
+## Screenshots & UI Tour
 
-Comprehensive technical documentation is maintained in the [`docs/`](file:///d:/Mine_project/fullstack-redux-voting-app/docs) directory:
+<!-- Screenshots Placeholder: Visual documentation of key user journeys -->
+> *UI screenshots will be captured and added following deployment.*
 
-| Document | Description |
-|---|---|
-| [**`ARCHITECTURE.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/ARCHITECTURE.md) | In-depth technical architecture, two-tier auth model, Admin Panel, Waiting Room Lobby, live headcount, room isolation, pure engine preservation, and component roles. |
-| [**`API_CONTRACT.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/API_CONTRACT.md) | Complete HTTP REST endpoint and Socket.io real-time event specifications, history endpoints, discovery and lobby APIs, payload schemas, error codes, and configuration parameters. |
-| [**`PROJECT_PROGRESS.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/PROJECT_PROGRESS.md) | Chronological milestone tracker recording 100% completion of Core MVP, Multi-Session Architecture, Feature 1 (Auth), Feature 4 (MongoDB + Results History), and Feature 3 (Admin Panel + Waiting Room). |
-| [**`CHANGELOG.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/CHANGELOG.md) | Historical changelog detailing architectural decisions, file changes, and test results across all releases. |
-| [**`USER_MANUAL.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/USER_MANUAL.md) | Comprehensive operational user manual for administrators and voters. |
-| [**`USER_TESTING_MANUAL.md`**](file:///d:/Mine_project/fullstack-redux-voting-app/docs/USER_TESTING_MANUAL.md) | Step-by-step testing manual and quality assurance guide for project evaluators. |
+| View | Description | Placeholder |
+|---|---|---|
+| **Lobby & Waiting Room** | Real-time participant waiting room with live headcount and QR share code | `[Screenshot: Lobby View]` |
+| **Voting Arena** | Live head-to-head pairwise matchup with countdown timer and vote selection | `[Screenshot: Pairwise Arena]` |
+| **Results & Podium** | Real-time animated Recharts vote distribution bars and championship podium | `[Screenshot: Results Podium]` |
+| **Admin Control Panel** | Host management dashboard with session creation modal and lifecycle controls | `[Screenshot: Admin Panel]` |
+| **Tournament Archive** | Completed historical tournament records catalog with round-by-round tallies | `[Screenshot: History Archive]` |
 
 ---
 
-## Scope Boundaries & Future Roadmap
+## License
 
-To ensure development integrity, completed work is strictly distinguished from deferred scope:
-
-### Completed in Feature 1 (Two-Tier Authentication)
-* Single global administrator with bcrypt password hashing and JWT issuance/verification.
-* Protected administrative lifecycle actions (`CREATE_SESSION`, `START_SESSION`, `ARCHIVE_SESSION`, `SET_ENTRIES`, `NEXT`).
-* Frictionless voter session joining with display-name-only input and cryptographically secure session-scoped token issuance.
-* Server-authoritative vote security and duplicate vote rejection (`${sessionId}:::${pair}:::${token}`).
-* Multi-session isolation with session-scoped voter tokens.
-* HTTP REST endpoints (`POST /api/admin/login`, `POST /api/sessions/:sessionId/join`, `GET /api/auth/me`).
-* Socket.io ingress authorization guards and machine-readable `action_error` events.
-* Client token enrichment middleware and authentication service.
-
-### Completed in Feature 4 (MongoDB Persistence & Results History)
-* MongoDB connection lifecycle management with fail-fast startup and graceful shutdown.
-* Mongoose data models for sessions (`Session.js`) and historical outcomes (`Result.js`).
-* Repository abstraction decoupling queries from domain logic (`repository.js`).
-* Non-blocking Redux store subscriber for asynchronous fire-and-forget persistence (`persistence.js`).
-* Protection of initial candidate entries lists during tournament progression via `isTournamentProgression` guard.
-* Safe server startup recovery resetting interrupted `open` sessions to `pending` and restoring active sessions into Redux.
-* Idempotent seed session persistence and result creation.
-* REST API endpoints (`GET /api/sessions/history`, `GET /api/sessions/:sessionId/result`, alias `/history`).
-* Frontend history state isolation (`state.history` vs `state.sessions`) in Redux RTK.
-* Dedicated `/history` archive page with loading, error/retry, empty, and populated card grid states.
-* Historical result fallback in `/sessions/:id/results` for concluded sessions not in active memory.
-* Total preservation of [`voting-server/src/core.js`](file:///d:/Mine_project/fullstack-redux-voting-app/voting-server/src/core.js).
-
-### Completed in Feature 3 (Admin Panel & Waiting Room Lobby)
-* Dedicated Admin Management Dashboard (`/admin`) protected by `AdminGuard` and admin JWT.
-* Full session creation suite with custom/auto slugs, title validation, candidate entries sanitization, and collision handling.
-* Strict Socket.io admin lifecycle authority (`CREATE_SESSION`, `START_SESSION`, `NEXT`, `ARCHIVE_SESSION`) with zero competing REST mutation endpoints.
-* Participant Waiting Room Lobby (`/sessions/:id/lobby`) with instant direct URL/QR access, metadata hydration (`GET /api/sessions/:id/lobby`), and display-name joining.
-* Authoritative in-memory session voter registry tracking live participant headcount and broadcasting `lobby_update` events.
-* Client-side QR code generation using `qrcode` rendering shareable lobby URLs without embedding voter tokens, admin JWTs, or secrets.
-* Automated participant progression from Waiting Room (`/sessions/:id/lobby`) to Voting Arena (`/sessions/:id/vote`) upon session activation.
-* Full multi-session isolation in normalized Redux store (`voterCount` stored per session in `state.sessions.bySessionId[sessionId]`).
-* Modern routing hierarchy and backwards-compatible redirect routes (`/dashboard`, `/elections`, `/vote`, `/results`).
-
-### Completed in Feature 2 (Voting Timer)
-* Server-authoritative in-memory `TimerManager` (`timer.js`) driving round timeouts and store progression (`NEXT`).
-* End-to-end duration configuration: `5–300` seconds integer-only, default `30` seconds, persisted in session state.
-* Room-scoped real-time synchronization: `timer_state` events emitted strictly to room `session:${sessionId}`.
-* Voter vote guarding: Blocks voting and disables buttons upon local timer expiry without page reload.
-* Admin session card countdown: Active sessions display live countdown; pending/completed/archived sessions display static duration badge.
-
-### Completed in Feature 5 (Real-Time Results Chart)
-* Dedicated `ResultsChart` presentation component built with Recharts rendering graphical pairwise vote distributions.
-* Pure data transformation utilities (`resultsUtils.js`) providing safe percentage calculation and presentation model derivation.
-* Strict Results Visibility guarding: tallies, vote totals, percentages, and `ResultsChart` are strictly hidden from the DOM during active voting rounds (`VOTING_IN_PROGRESS`).
-* Real-Time Round Transition Invalidation: automatic invalidation of old candidate data, tallies, and chart components on Round N -> Round N+1 transition via round-scoped React keys (`getSessionPairLockKey`).
-
-### Completed in Feature 6 (Admin Session Creation & Session Management)
-* Prominent `+ Create New Session` modal dialog (`AdminSessionModal.jsx` / `AdminSessionModal.css`) with title, custom ID, timer duration (5–300s, default 30s), and dynamic candidate entries roster.
-* Dedicated session management modal dialog (`AdminManageModal.jsx` / `AdminManageModal.css`) providing state-tailored lifecycle operations across `pending`, `open`, `completed`, and `archived` states.
-* Explicit two-step archival confirmation dialog (`Confirm Session Archival`) guarding `ARCHIVE_SESSION` dispatches against accidental triggers.
-* Backend persistence hardening: `Session` Mongoose schema explicitly persists `timerDuration` (default 30, min 5, max 300), which survives backend shutdown and is restored during `recoverSessionsFromDb()`.
-* Authoritative server-side validation in `server.js` guarding `CREATE_SESSION` with machine-readable `action_error` feedback.
-* Formally accepted monotonic lifecycle status update guard in `repository.js` permanently resolving the pre-existing persistence timing race.
-* Complete multi-session room isolation (`session:${sessionId}`) and pure core engine preservation (`core.js` byte-identical).
-
-### Completed in Feature 7 (Early Round Completion)
-* Dual convergence round termination: stops when either server timer expires OR 100% of eligible voters submit valid ballots.
-* Monotonic round identity (`${sessionId}:::r${roundIndex}`) preventing collisions when identical pairs recur.
-* In-memory per-round voter participation tracking (`submissionsByRound`), dynamic eligibility derived from `getVoterCount(sessionId)`, and zero-voter protection.
-* Idempotent round closure gate (`closeRoundOnce`) disarming active timers, preventing duplicate `NEXT` dispatches, and rejecting stale callbacks.
-* Strict frontend server authority: client operates purely reactively without calculating quorum or auto-advancing rounds.
-
-### Completed in Feature 8 (Round Results Lifecycle)
-* Monotonic round results lifecycle: `VOTING` → `ROUND_CLOSED` → `RESULTS_REVEALED` → `NEXT` → `VOTING` (or `COMPLETED` for championship round).
-* Frozen results snapshot: captures immutable `{ pair, tally, closedAt }` upon round closure, rendering stable, uncorrupted outcomes during reveal.
-* Server-authoritative reveal countdown: `TimerManager` broadcasts `timer_state` (`status: 'revealing'`), enforcing timer exclusivity.
-* Strict client server authority: frontend countdown is purely visual; zero client `NEXT` dispatching on countdown zero.
-* Closed-round vote rejection: late submissions during `ROUND_CLOSED` or `RESULTS_REVEALED` are rejected at ingress with `action_error: { action: 'VOTE', error: 'ROUND_CLOSED' }`.
-* Client reconnect resilience: reconnecting during reveal hydrates directly into the active reveal window with original `expiresAt` without timer reset.
-* Championship round handling: final pairwise matchup transitions `VOTING` → `ROUND_CLOSED` → `RESULTS_REVEALED` → `COMPLETED` with decisive champion display.
-* Pure engine preservation: [`voting-server/src/core.js`](file:///d:/Mine_project/fullstack-redux-voting-app/voting-server/src/core.js) verified 100% byte-for-byte identical (SHA-256: `b479f3f0b90c5bd81e1a813b3c5753179efeecd08a531aa833000b65188fb310`).
-
-### Explicitly Deferred Future Work
-* **Resolved: Early Round Termination on 100% Turnout**: Fully implemented and verified in Feature 7 via dynamic participation accounting and idempotent `closeRoundOnce` execution.
-* **Resolved: Round Results Lifecycle**: Fully implemented and verified in Feature 8 via `ROUND_CLOSED` and `RESULTS_REVEALED` lifecycle phases, frozen `finalVote` snapshots, and authoritative reveal timers.
-* **Future Security Hardening** (`NOT STARTED`): Migration of admin JWT and voter tokens from client-side storage to `httpOnly`, `SameSite=Strict`, `Secure` cookies.
+This project does not currently have an open source license attached. A license decision is required before public distribution or commercial use (common choices include [MIT](https://opensource.org/licenses/MIT) for permissive open-source or [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) for patent protections).

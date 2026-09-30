@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, Link } from 'react-router-dom';
-import { Trophy, RefreshCw, AlertCircle, CheckCircle, User, Clock } from 'lucide-react';
+import { Trophy, RefreshCw, AlertCircle, CheckCircle, User, Clock, Radio } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import VoteCard from '../components/voting/VoteCard';
 import CountdownTimer from '../components/CountdownTimer';
@@ -17,7 +17,12 @@ import {
   getSessionPairLockKey,
   selectRoundLifecycle,
   selectFinalVote,
-  selectRevealTimer
+  selectRevealTimer,
+  selectVotingMode,
+  selectTiePending,
+  selectIsTiePending,
+  selectCandidates,
+  selectRoundId
 } from '../redux/voteSlice';
 import { getPairwiseSummary } from '../components/results/resultsUtils';
 import {
@@ -51,6 +56,11 @@ function Voting() {
   const roundLifecycle = useSelector((state) => selectRoundLifecycle(state, routeSessionId));
   const finalVote = useSelector((state) => selectFinalVote(state, routeSessionId));
   const revealTimer = useSelector((state) => selectRevealTimer(state, routeSessionId));
+  const votingMode = useSelector((state) => selectVotingMode(state, routeSessionId));
+  const tiePending = useSelector((state) => selectTiePending(state, routeSessionId));
+  const isTiePending = useSelector((state) => selectIsTiePending(state, routeSessionId));
+  const candidates = useSelector((state) => selectCandidates(state, routeSessionId));
+  const roundId = useSelector((state) => selectRoundId(state, routeSessionId));
 
   // Voter identity state
   const [sessionJoinedOverride, setSessionJoinedOverride] = useState(null);
@@ -74,7 +84,9 @@ function Voting() {
   const currentDisplayName = customDisplayName || getVoterDisplayName(routeSessionId) || '';
 
   const pair = voteState?.pair || [];
-  const lockKey = getSessionPairLockKey(routeSessionId, pair);
+  const effectiveCandidates = candidates.length >= 2 ? candidates : pair;
+  const baseLockKey = getSessionPairLockKey(routeSessionId, effectiveCandidates);
+  const lockKey = (baseLockKey && roundId) ? `${baseLockKey}:::${roundId}` : baseLockKey;
 
   // Clear server errors when candidate pair advances to a new round
   const [prevLockKey, setPrevLockKey] = useState(lockKey);
@@ -102,14 +114,20 @@ function Voting() {
   // Track user selections keyed to session-specific pair locks: `${sessionId}:::${pair}`
   const [votesByLockKey, setVotesByLockKey] = useState({});
 
-  const isRoundClosed = roundLifecycle === 'ROUND_CLOSED' || roundLifecycle === 'RESULTS_REVEALED';
+  const isTiePendingState = isTiePending || roundLifecycle === 'TIE_PENDING';
+  const isRoundClosed = roundLifecycle === 'ROUND_CLOSED' || roundLifecycle === 'RESULTS_REVEALED' || isTiePendingState;
   const hasVotedForCurrentPair = Boolean(lockKey && votesByLockKey[lockKey]);
   const votedEntry = lockKey ? (votesByLockKey[lockKey] || null) : null;
   const isVoteDisabled = hasVotedForCurrentPair || isExpired || isRoundClosed;
 
+  const finalCandidates = (finalVote && Array.isArray(finalVote.candidates) && finalVote.candidates.length >= 2)
+    ? finalVote.candidates
+    : ((finalVote && Array.isArray(finalVote.pair) && finalVote.pair.length >= 2)
+        ? finalVote.pair
+        : effectiveCandidates);
   const finalPair = (finalVote && Array.isArray(finalVote.pair) && finalVote.pair.length >= 2)
     ? finalVote.pair
-    : pair;
+    : (pair.length >= 2 ? pair : effectiveCandidates.slice(0, 2));
   const finalTally = (finalVote && typeof finalVote.tally === 'object')
     ? finalVote.tally
     : (voteState?.tally || {});
@@ -188,6 +206,7 @@ function Voting() {
     setSessionJoinedOverride(true);
     setCustomDisplayName(result.displayName);
     setDisplayNameInput('');
+    subscribeSession(routeSessionId);
   };
 
   const handleVote = (entry) => {
@@ -249,6 +268,12 @@ function Voting() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', fontSize: '0.8rem', color: '#94a3b8' }}>
                   <User size={14} />
                   <span>Voting as: <strong style={{ color: '#f8fafc' }}>{currentDisplayName}</strong></span>
+                </div>
+              )}
+              {typeof session.connectedCount === 'number' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', marginLeft: (joined && currentDisplayName) ? '0.75rem' : 0, fontSize: '0.8rem', color: '#38bdf8' }}>
+                  <Radio size={14} />
+                  <span><strong>{session.connectedCount}</strong> {session.connectedCount === 1 ? 'voter' : 'voters'} active</span>
                 </div>
               )}
             </div>
@@ -354,8 +379,42 @@ function Voting() {
             </section>
           )}
 
-          {/* State 4: Loaded and Joined — Round Closed Transition */}
-          {hasLoaded && !winner && joined && roundLifecycle === 'ROUND_CLOSED' && (
+          {/* State 4: Loaded and Joined — Tie Pending Resolution Banner (AC-6) */}
+          {hasLoaded && !winner && joined && isTiePendingState && (
+            <section className="voting-status-card" aria-live="polite" style={{ borderColor: 'rgba(245, 158, 11, 0.35)' }} data-testid="tie-pending-card">
+              <div className="empty-icon-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }} aria-hidden="true">
+                <Clock size={44} />
+              </div>
+              <span className="pairwise-badge" style={{ marginBottom: '0.75rem', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+                TIE PENDING RESOLUTION
+              </span>
+              <h1 className="voting-status-title">Tie in Progress</h1>
+              <p className="voting-status-desc">
+                {tiePending?.candidates && tiePending.candidates.length > 0
+                  ? `Matchup tied between ${tiePending.candidates.join(' and ')}. Waiting for administrator resolution or automatic coin flip...`
+                  : 'Tie in progress. Waiting for administrator resolution or coin flip...'}
+              </p>
+              {tiePending?.expiresAt && (
+                <div style={{ marginTop: '1.25rem' }}>
+                  <CountdownTimer
+                    timer={{ expiresAt: tiePending.expiresAt, duration: tiePending.duration || 30, status: 'running' }}
+                    label="AUTOMATIC RESOLUTION IN"
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
+                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: '#4ade80', textDecoration: 'none', fontSize: '0.85rem' }}>
+                  View Results →
+                </Link>
+                <Link to="/sessions" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>
+                  All Sessions
+                </Link>
+              </div>
+            </section>
+          )}
+
+          {/* State 5: Loaded and Joined — Round Closed Transition */}
+          {hasLoaded && !winner && joined && roundLifecycle === 'ROUND_CLOSED' && !isTiePendingState && (
             <section className="voting-status-card" aria-live="polite">
               <div className="empty-icon-badge" aria-hidden="true">
                 <Clock size={44} />
@@ -378,8 +437,8 @@ function Voting() {
             </section>
           )}
 
-          {/* State 5: Loaded and Joined — Results Revealed Presentation */}
-          {hasLoaded && !winner && joined && roundLifecycle === 'RESULTS_REVEALED' && (
+          {/* State 6: Loaded and Joined — Results Revealed Presentation */}
+          {hasLoaded && !winner && joined && roundLifecycle === 'RESULTS_REVEALED' && !isTiePendingState && (
             <section className="pairwise-arena">
               <header className="pairwise-header">
                 <span className="pairwise-badge" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#facc15' }}>
@@ -394,27 +453,41 @@ function Voting() {
                 )}
               </header>
 
-              <div className="matchup-arena">
-                <VoteCard
-                  entry={finalPair[0]}
-                  disabled={true}
-                  hasVoted={votedEntry === finalPair[0]}
-                  tally={finalTally[finalPair[0]] ?? 0}
-                />
-
-                <div className="matchup-divider" aria-hidden="true">
-                  <div className="vs-circle">
-                    <span>VS</span>
-                  </div>
+              {finalCandidates.length > 2 || votingMode === 'single_ballot' ? (
+                <div className="candidates-grid" data-testid="revealed-ballot-grid">
+                  {finalCandidates.map((cand) => (
+                    <VoteCard
+                      key={cand}
+                      entry={cand}
+                      disabled={true}
+                      hasVoted={votedEntry === cand}
+                      tally={finalTally[cand] ?? 0}
+                    />
+                  ))}
                 </div>
+              ) : (
+                <div className="matchup-arena">
+                  <VoteCard
+                    entry={finalPair[0]}
+                    disabled={true}
+                    hasVoted={votedEntry === finalPair[0]}
+                    tally={finalTally[finalPair[0]] ?? 0}
+                  />
 
-                <VoteCard
-                  entry={finalPair[1]}
-                  disabled={true}
-                  hasVoted={votedEntry === finalPair[1]}
-                  tally={finalTally[finalPair[1]] ?? 0}
-                />
-              </div>
+                  <div className="matchup-divider" aria-hidden="true">
+                    <div className="vs-circle">
+                      <span>VS</span>
+                    </div>
+                  </div>
+
+                  <VoteCard
+                    entry={finalPair[1]}
+                    disabled={true}
+                    hasVoted={votedEntry === finalPair[1]}
+                    tally={finalTally[finalPair[1]] ?? 0}
+                  />
+                </div>
+              )}
 
               {/* Feedback and instructions */}
               <div className="pairwise-feedback" aria-live="polite">
@@ -442,8 +515,8 @@ function Voting() {
             </section>
           )}
 
-          {/* State 6: Loaded and Joined but No Active Pair */}
-          {hasLoaded && !winner && joined && (!roundLifecycle || roundLifecycle === 'VOTING') && pair.length < 2 && (
+          {/* State 7: Loaded and Joined but No Active Candidates */}
+          {hasLoaded && !winner && joined && (!roundLifecycle || roundLifecycle === 'VOTING') && !isTiePendingState && effectiveCandidates.length < 2 && (
             <section className="voting-status-card" aria-live="polite">
               <div className="empty-icon-badge" aria-hidden="true">
                 <AlertCircle size={44} />
@@ -460,14 +533,18 @@ function Voting() {
             </section>
           )}
 
-          {/* State 7: Active Pairwise Matchup for Joined Voter */}
-          {hasLoaded && !winner && joined && (!roundLifecycle || roundLifecycle === 'VOTING') && pair.length >= 2 && (
+          {/* State 8: Active Matchup for Joined Voter (AC-2) */}
+          {hasLoaded && !winner && joined && (!roundLifecycle || roundLifecycle === 'VOTING') && !isTiePendingState && effectiveCandidates.length >= 2 && (
             <section className="pairwise-arena">
               <header className="pairwise-header">
-                <span className="pairwise-badge">PAIRWISE COMPARISON</span>
+                <span className="pairwise-badge">
+                  {votingMode === 'single_ballot' ? 'SINGLE BALLOT' : 'PAIRWISE COMPARISON'}
+                </span>
                 <h1 className="pairwise-title">Choose Your Favorite</h1>
                 <p className="pairwise-subtitle">
-                  Cast your vote for the candidate you want to advance to the next round.
+                  {votingMode === 'single_ballot'
+                    ? 'Cast your vote for your preferred candidate on the ballot.'
+                    : 'Cast your vote for the candidate you want to advance to the next round.'}
                 </p>
                 <CountdownTimer timer={timer} />
               </header>
@@ -491,29 +568,42 @@ function Voting() {
                 </div>
               )}
 
-              <div className="matchup-arena">
-                <VoteCard
-                  entry={pair[0]}
-                  onVote={handleVote}
-                  disabled={isVoteDisabled}
-                  hasVoted={votedEntry === pair[0]}
-                  tally={voteState?.tally?.[pair[0]]}
-                />
-
-                <div className="matchup-divider" aria-hidden="true">
-                  <div className="vs-circle">
-                    <span>VS</span>
-                  </div>
+              {/* Multi-candidate grid if single ballot or > 2 candidates; dual arena with VS if tournament pair */}
+              {votingMode === 'single_ballot' || effectiveCandidates.length > 2 ? (
+                <div className="candidates-grid" data-testid="single-ballot-grid">
+                  {effectiveCandidates.map((cand) => (
+                    <VoteCard
+                      key={cand}
+                      entry={cand}
+                      onVote={handleVote}
+                      disabled={isVoteDisabled}
+                      hasVoted={votedEntry === cand}
+                    />
+                  ))}
                 </div>
+              ) : (
+                <div className="matchup-arena">
+                  <VoteCard
+                    entry={effectiveCandidates[0]}
+                    onVote={handleVote}
+                    disabled={isVoteDisabled}
+                    hasVoted={votedEntry === effectiveCandidates[0]}
+                  />
 
-                <VoteCard
-                  entry={pair[1]}
-                  onVote={handleVote}
-                  disabled={isVoteDisabled}
-                  hasVoted={votedEntry === pair[1]}
-                  tally={voteState?.tally?.[pair[1]]}
-                />
-              </div>
+                  <div className="matchup-divider" aria-hidden="true">
+                    <div className="vs-circle">
+                      <span>VS</span>
+                    </div>
+                  </div>
+
+                  <VoteCard
+                    entry={effectiveCandidates[1]}
+                    onVote={handleVote}
+                    disabled={isVoteDisabled}
+                    hasVoted={votedEntry === effectiveCandidates[1]}
+                  />
+                </div>
+              )}
 
               {/* Feedback and instructions */}
               <div className="pairwise-feedback" aria-live="polite">

@@ -243,7 +243,13 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
 
       expect(result.success).to.be.true;
       expect(result.advanced).to.be.true;
-      expect(dispatchedAction).to.deep.equal({ type: 'NEXT', sessionId: 'sess_test' });
+      // Spec 0003: NEXT dispatches first so advanced can be derived from the
+      // post NEXT state, then APPEND_ROUND_RESULT ships the corrected snapshot.
+      expect(dispatchedAction).to.deep.equal({
+        type: 'APPEND_ROUND_RESULT',
+        sessionId: 'sess_test',
+        round: dispatchedAction.round
+      });
       expect(isRoundClosed('sess_test', round.roundId)).to.be.true;
     });
 
@@ -268,6 +274,9 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_test' });
 
       const round = initRound('sess_test', ['A', 'B']);
+      // The round must be voted before closure: an empty round is a 0:0 tie
+      // and travels the tie ladder (START_RUNOFF) instead of advancing.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_test', entry: 'A' });
       let nextDispatchCount = 0;
       const originalDispatch = store.dispatch;
       store.dispatch = (action) => {
@@ -293,6 +302,9 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_idemp' });
 
       const round = initRound('sess_idemp', ['A', 'B']);
+      // Decisive vote first: an empty round ladders instead of advancing, and
+      // the wrapper below drops non NEXT actions.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_idemp', entry: 'A' });
       let callCount = 0;
       store.dispatch = (action) => {
         if (action.type === 'NEXT') callCount++;
@@ -341,6 +353,9 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_race' });
 
       const round = initRound('sess_race', ['A', 'B']);
+      // Decisive vote first: an empty round is a 0:0 tie and ladders instead
+      // of advancing through NEXT.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_race', entry: 'A' });
       let nextDispatches = 0;
       const originalDispatch = store.dispatch;
       store.dispatch = (action) => {
@@ -383,6 +398,9 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_timer_after' });
 
       const round = initRound('sess_timer_after', ['A', 'B']);
+      // Decisive vote first (the wrapper below drops non NEXT actions); an
+      // empty round is a 0:0 tie and ladders instead of advancing.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_timer_after', entry: 'A' });
       let nextDispatches = 0;
       store.dispatch = (action) => {
         if (action.type === 'NEXT') nextDispatches++;
@@ -424,6 +442,9 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       store.dispatch({ type: 'CREATE_SESSION', sessionId: 'sess_stale', title: 'Stale Test', entries: ['A', 'B', 'C', 'D'] });
       store.dispatch({ type: 'START_SESSION', sessionId: 'sess_stale' });
 
+      // Decisive vote before the round closes (the wrapper below drops non
+      // NEXT actions); an empty round is a 0:0 tie and ladders instead.
+      store.dispatch({ type: 'VOTE', sessionId: 'sess_stale', entry: 'A' });
       let nextCount = 0;
       store.dispatch = (action) => {
         if (action.type === 'NEXT') nextCount++;
@@ -582,14 +603,24 @@ describe('Feature 7 — Stage A: Backend Participation Tracking & Idempotent Ear
       client2.emit('subscribe_session', 'sess_e2e');
 
       client1.on('session_state', (state) => {
-        if (state && state.vote && Array.isArray(state.vote.pair)) {
-          if (state.vote.pair[0] !== 'Trainspotting' || state.vote.pair[1] !== '28 Days Later') {
-            if (!roundAdvanced) {
-              roundAdvanced = true;
-              expect(state.vote.pair).to.deep.equal(['Sunshine', 'Trainspotting']);
+        // The two votes tie 1-1: under the AC-5 ladder the tied pair is
+        // requeued for an immediate rematch, observable via the reveal
+        // transition that closes the tied round.
+        if (state && state.roundLifecycle === 'RESULTS_REVEALED' && !roundAdvanced) {
+          roundAdvanced = true;
+          // The rematch requeue lands when the reveal expires; the room then
+          // returns to VOTING on the same pair with the tie counted.
+          setTimeout(() => {
+            try {
+              const session = store.getState().getIn(['sessions', 'sess_e2e']);
+              expect(session.get('tieCount')).to.equal(1);
+              expect(session.get('roundLifecycle')).to.equal('VOTING');
+              expect(session.getIn(['vote', 'pair']).toJS()).to.deep.equal(['Trainspotting', '28 Days Later']);
               done();
+            } catch (err) {
+              done(err);
             }
-          }
+          }, 1300);
         }
       });
 

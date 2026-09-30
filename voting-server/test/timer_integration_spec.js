@@ -426,7 +426,15 @@ describe('Timer Integration & Socket Behavior', () => {
       const oldPair = sessionInitial.getIn(['vote', 'pair']).toJS();
       const oldCandidate = oldPair[0];
 
-      // 2. Timer expires first -> enters RESULTS_REVEALED, then NEXT after reveal
+      // 2. Cast a decisive vote before expiry. An empty round is a 0:0 tie
+      // and now travels the tie ladder (rematch) instead of auto advancing.
+      store.dispatch({
+        type: 'VOTE',
+        sessionId: 'sess_default',
+        entry: oldCandidate
+      });
+
+      // Timer expires first -> enters RESULTS_REVEALED, then NEXT after reveal
       io.timerManager.handleExpiry('sess_default', store, io);
 
       // Wait for the default reveal timer to expire (1s + buffer)
@@ -435,7 +443,8 @@ describe('Timer Integration & Socket Behavior', () => {
       const sessionAfterExpiry = store.getState().getIn(['sessions', 'sess_default']);
       const newPair = sessionAfterExpiry.getIn(['vote', 'pair']).toJS();
 
-      // Ensure pair has progressed
+      // Ensure pair has progressed: the winner rejoins the BACK of the queue
+      // (core.next), so the new pair is the next two queued entries.
       expect(newPair).to.not.deep.equal(oldPair);
 
       // 3. Stale VOTE arrives for oldCandidate (which is not in the active pair now)

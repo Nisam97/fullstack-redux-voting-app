@@ -1,5 +1,6 @@
 import { isConnected } from './connection.js';
 import * as repository from './repository.js';
+import { SINGLE_BALLOT_MAX } from '../constants.js';
 
 /**
  * Persistence orchestration layer.
@@ -85,6 +86,13 @@ export async function persistStateChanges(prevState, currentState) {
     if (!isTournamentProgression && prevEntries !== currEntries && currEntries) {
       persistEntriesChange(sessionId, currEntries);
     }
+
+    // Detect join code refresh
+    const prevJoinCode = prevSession.get('joinCode');
+    const currJoinCode = currSession.get('joinCode');
+    if (prevJoinCode !== currJoinCode && currJoinCode) {
+      persistJoinCodeChange(sessionId, currJoinCode);
+    }
   });
 }
 
@@ -104,12 +112,26 @@ function persistNewSession(sessionId, session) {
     ? storedDuration
     : 30;
 
+  const rawCandidateInfo = session.get('candidateInfo');
+  const candidateInfo = rawCandidateInfo && typeof rawCandidateInfo.toJS === 'function'
+    ? rawCandidateInfo.toJS()
+    : (Array.isArray(rawCandidateInfo) ? rawCandidateInfo : []);
+
   repository.saveSession({
     sessionId,
     title: session.get('title') || '',
     entries: entriesArray,
     status: session.get('status') || 'pending',
-    timerDuration
+    timerDuration,
+    type: session.get('type') || 'public',
+    votingMode: session.get('votingMode') || (entriesArray.length <= SINGLE_BALLOT_MAX ? 'single_ballot' : 'tournament'),
+    joinCode: session.get('joinCode') || undefined,
+    whoCanJoin: session.get('whoCanJoin') || 'public',
+    candidateInfo,
+    publishResultsPublicly: session.get('publishResultsPublicly') !== undefined
+      ? session.get('publishResultsPublicly')
+      : true,
+    pendingExpiresAt: session.get('pendingExpiresAt') || null
   }).catch(err => {
     console.error(`[Persistence] Failed to persist new session "${sessionId}":`, err.message);
   });
@@ -158,9 +180,9 @@ export async function persistCompletedResult(sessionId, session) {
     return null;
   }
 
-  // Idempotency check: don't save duplicate result for the same session
+  // Idempotency check: don't save duplicate result if winner is already recorded
   const existingResult = await repository.getResultBySessionId(sessionId);
-  if (existingResult) {
+  if (existingResult && existingResult.winner) {
     return existingResult;
   }
 
@@ -187,14 +209,17 @@ export async function persistCompletedResult(sessionId, session) {
     || (sessionDoc && sessionDoc.winner)
     || null;
 
-  if (!winner) {
+  const sessionStatus = (session && typeof session.get === 'function' ? session.get('status') : (session && session.status));
+  const isNoResult = sessionStatus === 'completed' && (session && typeof session.get === 'function' ? session.get('winner') === null : session && session.winner === null);
+
+  if (!winner && !isNoResult) {
     console.warn(`[Persistence] Cannot persist result for session "${sessionId}": winner is missing`);
     return null;
   }
 
-  // If entries could not be retrieved from DB or session, fallback to [winner] to satisfy schema
+  // If entries could not be retrieved from DB or session, fallback to [winner] or empty list to satisfy schema
   if (!entries || entries.length === 0) {
-    entries = [winner];
+    entries = winner ? [winner] : [];
   }
 
   try {
@@ -228,6 +253,20 @@ function persistEntriesChange(sessionId, entries) {
     entries: entriesArray
   }).catch(err => {
     console.error(`[Persistence] Failed to persist entries for session "${sessionId}":`, err.message);
+  });
+}
+
+/**
+ * Persist an updated join code for a session to MongoDB.
+ * @param {string} sessionId
+ * @param {string} joinCode
+ */
+function persistJoinCodeChange(sessionId, joinCode) {
+  repository.saveSession({
+    sessionId,
+    joinCode
+  }).catch(err => {
+    console.error(`[Persistence] Failed to persist refreshed join code for session "${sessionId}":`, err.message);
   });
 }
 
@@ -291,8 +330,36 @@ export async function recoverSessionsFromDb(store) {
           sessionId: sessionData.sessionId,
           title: sessionData.title || '',
           entries: sessionData.entries,
-          timerDuration
+          timerDuration,
+          sessionType: sessionData.type || 'public',
+          votingMode: sessionData.votingMode,
+          joinCode: sessionData.joinCode,
+          whoCanJoin: sessionData.whoCanJoin || 'public',
+          candidateInfo: sessionData.candidateInfo || [],
+          publishResultsPublicly: sessionData.publishResultsPublicly,
+          pendingExpiresAt: sessionData.pendingExpiresAt
         });
+
+        // AC-8: Recover round history if a Result doc exists with rounds
+        const resultDoc = await repository.getResultBySessionId(sessionData.sessionId);
+        if (resultDoc && Array.isArray(resultDoc.rounds) && resultDoc.rounds.length > 0) {
+          for (const round of resultDoc.rounds) {
+            store.dispatch({
+              type: 'APPEND_ROUND_RESULT',
+              sessionId: sessionData.sessionId,
+              round: {
+                roundIndex: round.roundIndex,
+                kind: round.kind,
+                candidates: round.candidates,
+                tally: round.tally,
+                totalVotes: round.totalVotes,
+                closedAt: round.closedAt,
+                resolution: round.resolution,
+                advanced: round.advanced
+              }
+            });
+          }
+        }
 
         // For completed sessions, we need to reflect their completed status.
         // The session starts as 'pending' from CREATE_SESSION — we don't START
@@ -355,12 +422,26 @@ export async function persistSeedSessions(store, seedSessionIds) {
         ? storedDuration
         : 30;
 
+      const rawCandidateInfo = session.get('candidateInfo');
+      const candidateInfo = rawCandidateInfo && typeof rawCandidateInfo.toJS === 'function'
+        ? rawCandidateInfo.toJS()
+        : (Array.isArray(rawCandidateInfo) ? rawCandidateInfo : []);
+
       await repository.saveSession({
         sessionId,
         title: session.get('title') || '',
         entries: entriesArray,
         status: session.get('status') || 'pending',
-        timerDuration
+        timerDuration,
+        type: session.get('type') || 'public',
+        votingMode: session.get('votingMode') || (entriesArray.length <= SINGLE_BALLOT_MAX ? 'single_ballot' : 'tournament'),
+        joinCode: session.get('joinCode') || undefined,
+        whoCanJoin: session.get('whoCanJoin') || 'public',
+        candidateInfo,
+        publishResultsPublicly: session.get('publishResultsPublicly') !== undefined
+          ? session.get('publishResultsPublicly')
+          : true,
+        pendingExpiresAt: session.get('pendingExpiresAt') || null
       });
       console.log(`[Persistence] Persisted seed session "${sessionId}"`);
     } catch (err) {

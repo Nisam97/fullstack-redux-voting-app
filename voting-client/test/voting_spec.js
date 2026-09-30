@@ -132,17 +132,28 @@ test('Stage F — Redux Multi-Session Architecture & State Isolation', async (t)
     let state = voteReducer(initialState, setSessionState(sessionA));
     state = voteReducer(state, setSessionState(sessionB));
 
-    // Cast vote in session A
-    const stateAfterVoteA = voteReducer(state, vote('sess_default', 'Trainspotting'));
-    assert.strictEqual(stateAfterVoteA.bySessionId.sess_default.vote.tally.Trainspotting, 5);
+    // Authoritative update for session A (server broadcast): session B untouched
+    const stateAfterUpdateA = voteReducer(state, setSessionState({
+      ...sessionA,
+      vote: { pair: ['Trainspotting', '28 Days Later'], tally: { Trainspotting: 5 } }
+    }));
+    assert.strictEqual(stateAfterUpdateA.bySessionId.sess_default.vote.tally.Trainspotting, 5);
     // Session B tally MUST remain exactly 7
-    assert.strictEqual(stateAfterVoteA.bySessionId.sess_horror.vote.tally.Alien, 7);
+    assert.strictEqual(stateAfterUpdateA.bySessionId.sess_horror.vote.tally.Alien, 7);
 
-    // Cast vote in session B
-    const stateAfterVoteB = voteReducer(stateAfterVoteA, vote('sess_horror', 'Alien'));
-    assert.strictEqual(stateAfterVoteB.bySessionId.sess_horror.vote.tally.Alien, 8);
+    // Authoritative update for session B: session A keeps its own tally
+    const stateAfterUpdateB = voteReducer(stateAfterUpdateA, setSessionState({
+      ...sessionB,
+      vote: { pair: ['Alien', 'Halloween'], tally: { Alien: 8 } }
+    }));
+    assert.strictEqual(stateAfterUpdateB.bySessionId.sess_horror.vote.tally.Alien, 8);
     // Session A tally MUST remain exactly 5
-    assert.strictEqual(stateAfterVoteB.bySessionId.sess_default.vote.tally.Trainspotting, 5);
+    assert.strictEqual(stateAfterUpdateB.bySessionId.sess_default.vote.tally.Trainspotting, 5);
+
+    // Local VOTE is pure intent (server authoritative): no local tally change
+    const stateAfterLocalVote = voteReducer(stateAfterUpdateB, vote('sess_default', 'Trainspotting'));
+    assert.strictEqual(stateAfterLocalVote.bySessionId.sess_default.vote.tally.Trainspotting, 5);
+    assert.strictEqual(stateAfterLocalVote.bySessionId.sess_horror.vote.tally.Alien, 8);
   });
 
   await t.test('5. Active session selection and switching preserves both states', () => {
@@ -203,15 +214,16 @@ test('Stage F — Redux Multi-Session Architecture & State Isolation', async (t)
       vote: { pair: ['Alien', 'Halloween'], tally: { Alien: 1 } }
     }));
 
-    // SET_ENTRIES on sess_default
+    // SET_ENTRIES on sess_default (still applied locally: entry staging is client scope)
     state = voteReducer(state, setEntries('sess_default', ['Shallow Grave', 'The Beach']));
     assert.deepStrictEqual(selectEntries(state, 'sess_default'), ['Shallow Grave', 'The Beach']);
     // sess_horror entries remain unchanged
     assert.deepStrictEqual(selectEntries(state, 'sess_horror'), ['Psycho']);
 
-    // NEXT on sess_default
+    // NEXT on sess_default is a local no-op: the server owns round advancement,
+    // so both sessions' votes stay exactly as the last broadcast left them
     state = voteReducer(state, next('sess_default'));
-    assert.deepStrictEqual(selectVote(state, 'sess_default').pair, ['Shallow Grave', 'The Beach']);
+    assert.deepStrictEqual(selectVote(state, 'sess_default').pair, ['Trainspotting', '28 Days Later']);
     // sess_horror vote remains unchanged
     assert.deepStrictEqual(selectVote(state, 'sess_horror').pair, ['Alien', 'Halloween']);
   });
