@@ -26,7 +26,6 @@ VoteSphere is an enterprise-grade, real-time pairwise and single-ballot voting p
 - [API & WebSocket Protocol](#api--websocket-protocol)
 - [Testing & Verification](#testing--verification)
 - [Screenshots & UI Tour](#screenshots--ui-tour)
-- [License](#license)
 
 ---
 
@@ -421,6 +420,4 @@ npm run build   # Production Vite bundle: builds successfully (a >500 kB chunk-s
 
 ---
 
-## License
 
-This project does not currently have an open source license attached. A license decision is required before public distribution or commercial use (common choices include [MIT](https://opensource.org/licenses/MIT) for permissive open-source or [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) for patent protections).
