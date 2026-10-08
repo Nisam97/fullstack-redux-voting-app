@@ -25,7 +25,6 @@ VoteSphere is an enterprise-grade, real-time pairwise and single-ballot voting p
 - [Environment Variables](#environment-variables)
 - [API & WebSocket Protocol](#api--websocket-protocol)
 - [Testing & Verification](#testing--verification)
-- [Screenshots & UI Tour](#screenshots--ui-tour)
 
 ---
 
@@ -402,21 +401,6 @@ npm run build   # Production Vite bundle: builds successfully (a >500 kB chunk-s
 ```
 
 **Overall Verified Status:** **1394 automated tests passing** (799 backend + 468 unit + 127 component), 0 failing, 0 lint warnings. Accessibility on the voting and lobby screens is asserted with `axe-core` at the critical and serious level, and that scan carries a self check so an empty result cannot pass as clean.
-
----
-
-## Screenshots & UI Tour
-
-<!-- Screenshots Placeholder: Visual documentation of key user journeys -->
-> *UI screenshots will be captured and added following deployment.*
-
-| View | Description | Placeholder |
-|---|---|---|
-| **Lobby & Waiting Room** | Real-time participant waiting room with live headcount and QR share code | `[Screenshot: Lobby View]` |
-| **Voting Arena** | Live head-to-head pairwise matchup with countdown timer and vote selection | `[Screenshot: Pairwise Arena]` |
-| **Results & Podium** | Real-time animated Recharts vote distribution bars and championship podium | `[Screenshot: Results Podium]` |
-| **Admin Control Panel** | Host management dashboard with session creation modal and lifecycle controls | `[Screenshot: Admin Panel]` |
-| **Tournament Archive** | Completed historical tournament records catalog with round-by-round tallies | `[Screenshot: History Archive]` |
 
 ---
 
