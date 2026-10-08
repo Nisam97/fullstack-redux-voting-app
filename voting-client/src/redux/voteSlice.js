@@ -7,7 +7,10 @@ import { deriveTotals } from '../components/results/resultsUtils.js';
 export const initialState = {
   list: [],
   activeSessionId: null,
-  bySessionId: {}
+  bySessionId: {},
+  // Set when the server rejects the stored admin JWT. Not session data, so it
+  // stays at the top level next to the normalized session shape.
+  adminSessionExpired: false
 };
 
 // Action Type Constants
@@ -21,6 +24,11 @@ export const VOTE = 'VOTE';
 export const NEXT = 'NEXT';
 export const SET_ENTRIES = 'SET_ENTRIES';
 export const RESET_SESSIONS = 'RESET_SESSIONS';
+// Declared here with the other action types, not next to its creator: the
+// reducer below references it while the slice is being built, so a later
+// `const` would still be in its temporal dead zone and the case would register
+// under a bogus key, silently never matching any dispatch.
+export const SET_ADMIN_SESSION_EXPIRED = 'SET_ADMIN_SESSION_EXPIRED';
 export const LOBBY_UPDATE = 'lobby_update';
 export const SET_LOBBY_UPDATE = 'SET_LOBBY_UPDATE';
 export const CREATE_SESSION = 'CREATE_SESSION';
@@ -39,6 +47,12 @@ export const APPROVE_PARTICIPANT = 'APPROVE_PARTICIPANT';
 export const REJECT_PARTICIPANT = 'REJECT_PARTICIPANT';
 export const REMOVE_PARTICIPANT = 'REMOVE_PARTICIPANT';
 export const SET_WHO_CAN_JOIN = 'SET_WHO_CAN_JOIN';
+export const SET_PUBLISH_RESULTS = 'SET_PUBLISH_RESULTS';
+// Local only: rolls the store copy back after the server refuses a publish.
+// Registered with the same handler, but never eligible for remote transmission.
+export const SET_PUBLISH_RESULTS_LOCAL = 'SET_PUBLISH_RESULTS_LOCAL';
+export const SET_TURNOUT = 'SET_TURNOUT';
+export const TURNOUT = 'session_turnout';
 
 /**
  * Normalizes a session detail object into a consistent shape
@@ -479,6 +493,23 @@ function handleLobbyUpdate(state, action) {
     ? Boolean(incoming.votingStarted)
     : (existing.votingStarted !== undefined ? existing.votingStarted : (status === 'open' || status === 'completed'));
 
+  // The secured session access fields must survive this reducer. The lobby
+  // hydrates itself with lobbyUpdate on mount, and Lobby.jsx decides whether to
+  // show the sign in wall from sessionType / whoCanJoin. Rebuilding the entry
+  // from a fixed field list silently dropped all three, so a secured session
+  // looked open, the wall never rendered, and an anonymous visitor was offered
+  // the plain join form. handleSetSessions already preserved type for the same
+  // reason.
+  const sessionType = incoming.sessionType !== undefined
+    ? incoming.sessionType
+    : (incoming.type !== undefined ? incoming.type : existing.sessionType);
+  const type = incoming.type !== undefined
+    ? incoming.type
+    : (incoming.sessionType !== undefined ? incoming.sessionType : existing.type);
+  const whoCanJoin = incoming.whoCanJoin !== undefined
+    ? incoming.whoCanJoin
+    : existing.whoCanJoin;
+
   state.bySessionId[cleanSessionId] = {
     ...existing,
     id: cleanSessionId,
@@ -489,6 +520,9 @@ function handleLobbyUpdate(state, action) {
     entryCount,
     isArchived,
     votingStarted,
+    ...(sessionType !== undefined ? { sessionType } : {}),
+    ...(type !== undefined ? { type } : {}),
+    ...(whoCanJoin !== undefined ? { whoCanJoin } : {}),
     hasLoaded: true
   };
 
@@ -582,6 +616,13 @@ function handleCreateSession(state, action) {
     ? rawDuration
     : (rawDuration !== undefined ? rawDuration : 30);
 
+  // The access fields have to land on the local copy too, not just on the wire.
+  // Without them the freshly created session looked public here until a server
+  // broadcast replaced it, so the Admin list and the lobby's secured sign in
+  // wall were briefly (and wrongly) public.
+  const sessionType = normalizeSessionType(action.sessionType ?? action.type);
+  const whoCanJoin = sessionType === 'secured' ? (action.whoCanJoin || 'allowlist') : 'public';
+
   if (!state.bySessionId) state.bySessionId = {};
   if (!state.bySessionId[cleanId]) {
     state.bySessionId[cleanId] = normalizeSession({
@@ -591,7 +632,10 @@ function handleCreateSession(state, action) {
       entries: Array.isArray(action.entries) ? action.entries : [],
       voterCount: 0,
       entryCount: Array.isArray(action.entries) ? action.entries.length : 0,
-      timerDuration
+      timerDuration,
+      type: sessionType,
+      sessionType,
+      whoCanJoin
     }, cleanId);
   }
   if (Array.isArray(state.list) && !state.list.some(s => s.id === cleanId || s.sessionId === cleanId)) {
@@ -603,6 +647,9 @@ function handleCreateSession(state, action) {
       voterCount: 0,
       entryCount: Array.isArray(action.entries) ? action.entries.length : 0,
       timerDuration,
+      type: sessionType,
+      sessionType,
+      whoCanJoin,
       createdAt: new Date().toISOString()
     });
   }
@@ -833,6 +880,54 @@ function handleAppendRoundResult(state, action) {
   return state;
 }
 
+/**
+ * Spec 0008 AC-3: stores the admin publish switch on the live session so the
+ * toggle reflects the accepted value without a full session state round trip.
+ */
+function handleSetPublishResults(state, action) {
+  const sessionId = action.sessionId || action.payload?.sessionId;
+  if (!sessionId || typeof sessionId !== 'string' || !state.bySessionId || !state.bySessionId[sessionId]) {
+    return state;
+  }
+  if (typeof action.publishResultsPublicly !== 'boolean') {
+    return state;
+  }
+  state.bySessionId[sessionId] = {
+    ...state.bySessionId[sessionId],
+    publishResultsPublicly: action.publishResultsPublicly
+  };
+  if (Array.isArray(state.list)) {
+    const item = state.list.find(s => s && (s.id === sessionId || s.sessionId === sessionId));
+    if (item) item.publishResultsPublicly = action.publishResultsPublicly;
+  }
+  return state;
+}
+
+/**
+ * Stores the admin per round turnout snapshot (spec 0008 AC-7) under
+ * bySessionId[sessionId], keeping session data out of the slice top level.
+ */
+function handleSetTurnout(state, action) {
+  const incoming = action.payload !== undefined ? action.payload : action;
+  if (!incoming || typeof incoming !== 'object') {
+    return state;
+  }
+  const sessionId = action.sessionId || incoming.sessionId || incoming.id;
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return state;
+  }
+  const cleanId = sessionId.trim();
+  if (!state.bySessionId) {
+    state.bySessionId = {};
+  }
+  const existing = state.bySessionId[cleanId] || normalizeSession({ id: cleanId }, cleanId);
+  state.bySessionId[cleanId] = {
+    ...existing,
+    turnout: Array.isArray(incoming.rounds) ? incoming.rounds : []
+  };
+  return state;
+}
+
 export const voteSlice = createSlice({
   name: 'sessions',
   initialState,
@@ -862,6 +957,11 @@ export const voteSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(SET_ADMIN_SESSION_EXPIRED, (state, action) => {
+        state.adminSessionExpired = action.payload !== undefined
+          ? Boolean(action.payload)
+          : Boolean(action.expired);
+      })
       .addCase(SESSIONS, handleSetSessions)
       .addCase(SET_SESSIONS, handleSetSessions)
       .addCase(SESSION_STATE, handleSetSessionState)
@@ -882,6 +982,10 @@ export const voteSlice = createSlice({
       .addCase(TIE_PENDING, handleSetTiePending)
       .addCase(RESOLVE_TIE, handleResolveTie)
       .addCase(SET_WHO_CAN_JOIN, handleSetWhoCanJoin)
+      .addCase(SET_PUBLISH_RESULTS, handleSetPublishResults)
+      .addCase(SET_PUBLISH_RESULTS_LOCAL, handleSetPublishResults)
+      .addCase(SET_TURNOUT, handleSetTurnout)
+      .addCase(TURNOUT, handleSetTurnout)
       .addCase(VOTE, handleVote)
       .addCase(NEXT, handleNext)
       .addCase(SET_ENTRIES, handleSetEntries)
@@ -995,18 +1099,39 @@ export const presenceUpdate = (sessionIdOrPayload, maybePresence) => {
 
 export const setPresenceUpdate = presenceUpdate;
 
+// The server validates the session type against 'public' and 'secured' and the
+// Session schema stores the same enum. The create form has always spoken
+// "open" for a public session, which is a *status* in this codebase rather than
+// a type, so it is normalised here instead of at every call site.
+const SESSION_TYPE_VALUES = ['public', 'secured'];
+
+function normalizeSessionType(rawType) {
+  if (rawType === 'open') return 'public';
+  return SESSION_TYPE_VALUES.includes(rawType) ? rawType : 'public';
+}
+
 export const createSession = (payloadOrId, maybeTitle, maybeEntries, maybeTimerDuration) => {
   if (payloadOrId && typeof payloadOrId === 'object') {
     const sessionId = payloadOrId.sessionId || payloadOrId.id || `sess_${Date.now()}`;
     const rawDuration = payloadOrId.timerDuration !== undefined
       ? payloadOrId.timerDuration
       : payloadOrId.duration;
+    // The access fields have to survive the trip to the server. Dropping them
+    // here made every session created from the Admin form public, which in turn
+    // made the secured eligibility gates and the allowlist actions unreachable
+    // for anything the UI created.
+    const sessionType = normalizeSessionType(payloadOrId.sessionType ?? payloadOrId.type);
+    const whoCanJoin = sessionType === 'secured'
+      ? (payloadOrId.whoCanJoin || 'allowlist')
+      : 'public';
     return {
       type: CREATE_SESSION,
       sessionId,
       title: payloadOrId.title || '',
       entries: Array.isArray(payloadOrId.entries) ? payloadOrId.entries : [],
       timerDuration: rawDuration !== undefined ? rawDuration : 30,
+      sessionType,
+      whoCanJoin,
       meta: { remote: true }
     };
   }
@@ -1016,6 +1141,8 @@ export const createSession = (payloadOrId, maybeTitle, maybeEntries, maybeTimerD
     title: maybeTitle || '',
     entries: Array.isArray(maybeEntries) ? maybeEntries : [],
     timerDuration: maybeTimerDuration !== undefined ? maybeTimerDuration : 30,
+    sessionType: 'public',
+    whoCanJoin: 'public',
     meta: { remote: true }
   };
 };
@@ -1479,10 +1606,14 @@ export const rejectParticipant = (sessionId, requestId) => ({
   requestId
 });
 
-export const removeParticipant = (sessionId, voterToken) => ({
+// Targets the voter by email rather than by token. The admin allowlist panel
+// only ever holds the email and the status, and the server resolves the email
+// to a user and a token itself, so passing an email keeps the client from
+// holding voter tokens it has no business seeing (AC-11, AC-14).
+export const removeParticipant = (sessionId, email) => ({
   type: REMOVE_PARTICIPANT,
   sessionId,
-  voterToken
+  email
 });
 
 export const setWhoCanJoin = (sessionId, whoCanJoin) => ({
@@ -1490,6 +1621,82 @@ export const setWhoCanJoin = (sessionId, whoCanJoin) => ({
   sessionId,
   whoCanJoin
 });
+
+// Spec 0008 AC-3: admin publish/unpublish of a completed secured result. Remote
+// intent, enriched with the admin token by the remote action middleware.
+// Spec 0008 AC-3: `onAck` is optional and receives the server's answer, so the
+// caller can render the value the server actually stored rather than the one it
+// asked for. The middleware turns it into the Socket.io acknowledgement
+// callback and keeps it off the wire.
+export const setPublishResults = (sessionId, publishResultsPublicly, onAck) => ({
+  type: SET_PUBLISH_RESULTS,
+  sessionId,
+  publishResultsPublicly,
+  meta: {
+    remote: true,
+    ...(typeof onAck === 'function' ? { onAck } : {})
+  }
+});
+
+// Spec 0008 AC-3: keeps the local copy in step with a publish the server
+// accepted. Local only: echoing it back would ask the server to undo a change
+// it never took.
+export const setPublishResultsLocal = (sessionId, publishResultsPublicly) => ({
+  type: SET_PUBLISH_RESULTS_LOCAL,
+  sessionId,
+  publishResultsPublicly
+});
+
+// Local-only: the server pushes turnout through the `session_turnout` event, so
+// this action must never echo back to the server.
+export const setTurnout = (sessionIdOrPayload, maybeRounds) => {
+  if (typeof sessionIdOrPayload === 'string') {
+    return {
+      type: SET_TURNOUT,
+      sessionId: sessionIdOrPayload,
+      payload: { sessionId: sessionIdOrPayload, rounds: Array.isArray(maybeRounds) ? maybeRounds : [] }
+    };
+  }
+  const payload = sessionIdOrPayload && typeof sessionIdOrPayload === 'object' ? sessionIdOrPayload : {};
+  return {
+    type: SET_TURNOUT,
+    sessionId: payload.sessionId || payload.id,
+    payload
+  };
+};
+
+// Local-only: set when the server rejects the stored admin JWT, so admin only
+// surfaces can say the session is gone instead of rendering as if data simply
+// does not exist yet. Cleared on a fresh admin login.
+export const setAdminSessionExpired = (expired = true) => ({
+  type: SET_ADMIN_SESSION_EXPIRED,
+  expired: Boolean(expired)
+});
+
+// A single shared empty array, so a session with no turnout returns the same
+// reference on every call. Returning a fresh [] here made react-redux warn that
+// the selector was unstable, which is noise that hides real warnings.
+const EMPTY_TURNOUT = Object.freeze([]);
+
+/**
+ * True once the server has rejected the stored admin JWT (spec 0008 AC-7).
+ * Admin only surfaces then have to say so, because the local expiry check still
+ * passes and the UI would otherwise render an admin panel that silently does
+ * nothing.
+ */
+export const selectAdminSessionExpired = (state) => Boolean(getSessionsState(state).adminSessionExpired);
+
+export const selectTurnout = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return session && Array.isArray(session.turnout) ? session.turnout : EMPTY_TURNOUT;
+};
+
+export const selectPublishResultsPublicly = (state, sessionId) => {
+  const targetId = sessionId || selectActiveSessionId(state);
+  const session = targetId ? selectSessionById(state, targetId) : null;
+  return Boolean(session && session.publishResultsPublicly);
+};
 
 export const selectSessionType = (state, sessionId) => {
   const targetId = sessionId || selectActiveSessionId(state);

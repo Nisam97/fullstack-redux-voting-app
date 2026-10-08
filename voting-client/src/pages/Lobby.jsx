@@ -33,7 +33,8 @@ import {
   hasJoinedSession,
   getVoterDisplayName,
   joinVoterSession,
-  clearVoterSession
+  clearVoterSession,
+  getAdminToken
 } from "../services/auth";
 import { selectCurrentVoter, selectIsVoterLoggedIn } from "../redux/voterAuthSlice";
 import "./Lobby.css";
@@ -50,7 +51,9 @@ import "./Lobby.css";
  *     * open: auto or guided transition to /sessions/:id/vote
  *     * completed: announcement of winner and link to /sessions/:id/results
  *     * archived: clear archive state notice
- *     * does-not-exist: gracefully rendered not-found state without crashing
+ *     * not-available: one neutral state for every lobby 404, whether the
+ *       session is missing, mistyped, or secured and unreadable by this caller
+ *       (spec 0008 AC-15). The copy never claims the session does not exist.
  * - Multi-session isolation: isolated by route parameter :id
  */
 function Lobby() {
@@ -113,7 +116,23 @@ function Lobby() {
     subscribeSession(routeSessionId);
 
     let isMounted = true;
-    fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(routeSessionId)}/lobby`)
+
+    // Spec 0008 AC-15: the lobby read is gated on the server, so it must carry
+    // the same credentials as the result and rounds reads. The `vs_voter`
+    // cookie rides along via `credentials: 'include'` and the admin Bearer
+    // header is attached when an admin token is in storage, otherwise an
+    // approved participant and the admin would meet the unknown session 404
+    // for a session they are allowed to read.
+    const lobbyHeaders = { Accept: 'application/json' };
+    const adminToken = getAdminToken();
+    if (adminToken) {
+      lobbyHeaders.Authorization = `Bearer ${adminToken}`;
+    }
+
+    fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(routeSessionId)}/lobby`, {
+      headers: lobbyHeaders,
+      credentials: 'include'
+    })
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) {
@@ -147,8 +166,15 @@ function Lobby() {
         if (isMounted) {
           setIsLoading(false);
           if (err.message === "SESSION_NOT_FOUND") {
-            setFetchError("Session not found.");
+            // A 404 now covers three cases: a missing session, a typo, and a
+            // secured session this caller may not read. They render one
+            // identical neutral state, because the client cannot tell them
+            // apart and must not claim the session does not exist
+            // (spec 0008 AC-15).
+            setFetchError("SESSION_NOT_AVAILABLE");
           } else {
+            // A transport failure is not an existence signal, so it keeps its
+            // own honest message rather than borrowing the neutral copy.
             setFetchError("Unable to load session lobby.");
           }
         }
@@ -293,18 +319,36 @@ function Lobby() {
       <Navbar />
 
       <main className="lobby-main">
-        {fetchError && !session ? (
+        {fetchError === "SESSION_NOT_AVAILABLE" && !session ? (
           <div className="lobby-card" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
             <AlertCircle size={48} style={{ color: "#ef4444", margin: "0 auto 1rem auto" }} />
             <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.5rem 0" }}>
-              Session Not Found
+              This session is not available.
             </h1>
-            <p style={{ color: "#94a3b8", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
-              The requested session <code>{routeSessionId}</code> does not exist or has been removed.
+            {isVoterLoggedIn ? (
+              <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
+                Check the link you were given, or ask the organizer for an invitation.
+              </p>
+            ) : (
+              <p style={{ color: "#94a3b8", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
+                <Link
+                  to={`/login?redirect=${encodeURIComponent(`/sessions/${routeSessionId}/lobby`)}`}
+                  style={{ color: "#38bdf8", fontWeight: 600 }}
+                >
+                  Sign in if you were invited.
+                </Link>
+              </p>
+            )}
+          </div>
+        ) : fetchError && !session ? (
+          <div className="lobby-card" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+            <AlertCircle size={48} style={{ color: "#ef4444", margin: "0 auto 1rem auto" }} />
+            <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.5rem 0" }}>
+              Unable to load session lobby.
+            </h1>
+            <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
+              Check your connection and try again.
             </p>
-            <Link to="/sessions" className="lobby-action-btn lobby-btn-primary">
-              Browse Available Sessions
-            </Link>
           </div>
         ) : isLoading && !session ? (
           <div className="lobby-card" style={{ textAlign: "center", padding: "3.5rem 1.5rem" }}>
@@ -382,14 +426,18 @@ function Lobby() {
                   <Users size={24} />
                 </div>
                 <div className="lobby-headcount-text">
-                  <h3>
+                  {/* h2, not h3: the session title above is the only h1 on
+                      this page, so jumping to h3 skipped a level and tripped
+                      axe's `heading-order` rule. The section headings below
+                      are h2 as well, and the participant card is h3. */}
+                  <h2>
                     {voterCount} {voterCount === 1 ? "Participant" : "Participants"} Registered
                     {typeof session?.connectedCount === "number" && (
                       <span style={{ fontSize: "0.85rem", fontWeight: 500, marginLeft: "0.5rem", color: "#38bdf8" }}>
                         ({session.connectedCount} online)
                       </span>
                     )}
-                  </h3>
+                  </h2>
                   <p>Authoritative live headcount updated in real time</p>
                 </div>
               </div>
@@ -416,7 +464,7 @@ function Lobby() {
                     {storedDisplayName ? storedDisplayName[0].toUpperCase() : "V"}
                   </div>
                   <div className="lobby-voter-details">
-                    <h4>{storedDisplayName || "Participant"}</h4>
+                    <h3>{storedDisplayName || "Participant"}</h3>
                     <p>
                       <UserCheck size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
                       Joined to this session
@@ -439,10 +487,10 @@ function Lobby() {
               </div>
             ) : isSecured && !isVoterLoggedIn ? (
               <section className="lobby-join-section">
-                <h3 className="lobby-join-title">
+                <h2 className="lobby-join-title">
                   <LogIn size={20} style={{ color: "#38bdf8" }} />
                   Secured Voting Session
-                </h3>
+                </h2>
                 <div style={{ marginBottom: "1.25rem", padding: "1.25rem", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: "10px" }}>
                   <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                     <AlertCircle size={22} style={{ color: "#f87171", flexShrink: 0, marginTop: 2 }} />
@@ -464,10 +512,10 @@ function Lobby() {
               </section>
             ) : (
               <section className="lobby-join-section">
-                <h3 className="lobby-join-title">
+                <h2 className="lobby-join-title">
                   <LogIn size={20} style={{ color: "#38bdf8" }} />
                   Join this Voting Session
-                </h3>
+                </h2>
                 {isVoterLoggedIn ? (
                   <p className="lobby-join-desc" style={{ color: "#38bdf8" }}>
                     Signed in as <strong>{currentVoter?.name}</strong> (@{currentVoter?.username}). Your display name is pre filled.

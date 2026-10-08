@@ -163,6 +163,17 @@
   margin: 0;
 }
 
+/* Keeps the Completed and type badges together on the right of the card
+   header, so a second badge does not inherit the row's 1rem gap. */
+.history-item-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .history-item-status-badge {
   padding: 0.2rem 0.6rem;
   border-radius: 9999px;
@@ -172,6 +183,28 @@
   color: #818cf8;
   border: 1px solid rgba(99, 102, 241, 0.3);
   white-space: nowrap;
+}
+
+/* Spec 0008 AC-9: the session type badge, so the archive says which entries are
+   secured rather than leaving a published secured result looking public. */
+.history-item-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  white-space: nowrap;
+}
+
+.history-item-type-badge--secured {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
 }
 
 .history-item-body {

@@ -26,7 +26,7 @@ The infrastructure is already in place to capture this. `closeRoundOnce` in `rou
 **Acceptance criteria** (the contract, each criterion is independently checkable):
 - **AC-1**: When a round closes (via `closeRoundOnce`), a frozen round snapshot is appended to the session's in memory `rounds` list via an `APPEND_ROUND_RESULT` action. The snapshot contains `roundIndex`, `kind`, `candidates`, `tally`, `totalVotes`, `closedAt`, `resolution`, and `advanced`.
 - **AC-2**: Each round snapshot is incrementally persisted to the `Result` document in MongoDB via `$push` to `Result.rounds[]` immediately after the round closes. A partial `Result` document (with `rounds: []`) is created at the first round close if none exists yet.
-- **AC-3**: The `rounds[]` data is included in the session state broadcast to connected clients, but only when `roundLifecycle` is `ROUND_CLOSED`, `RESULTS_REVEALED`, or the session status is `completed`. During `VOTING`, `rounds[]` is stripped from the broadcast payload.
+- **AC-3**: The `rounds[]` data is included in the session state broadcast to connected clients, but only when `roundLifecycle` is `ROUND_CLOSED`, `RESULTS_REVEALED`, or the session status is `completed`. A session recovered from a mid tournament crash also carries its `rounds[]`, because it comes back `pending` with no live round and every snapshot in the list was already broadcast when its round closed. During `VOTING`, `rounds[]` is stripped from the broadcast payload. Three carriers are gated, and they do not share one rule. `rounds[]` is the settled history of rounds that already closed, so it is released as soon as a round closes. `finalVote` is the tally of the round that has just closed and is still waiting for its reveal, so it is released only at a conclusion or a reveal, and the live `vote.tally` follows exactly the same rule as `finalVote`, because at `ROUND_CLOSED` it holds the same frozen numbers. `TIE_PENDING` withholds all three, because a tie awaiting an admin decision is not yet a settled outcome.
 - **AC-4**: The client results page renders an expandable accordion timeline where each row shows "Round N: Candidate A vs Candidate B" with a resolution badge. Expanding a round reveals the `ResultsChart` bar chart and per candidate vote counts.
 - **AC-5**: A totals panel below the accordion shows total votes per candidate across all rounds and the number of rounds played. It is visible after each round closes during an active session and always visible once the session concludes.
 - **AC-6**: The resolution label displays the human readable settlement method for each round (`majority_win` shown as "Majority Win", `tie_advance` as "Tie, Both Advanced").
@@ -77,6 +77,16 @@ Collect round snapshots in server memory during the session, bulk write the enti
 **Chosen option**: Option 1: Embed rounds in the Result document (incremental $push)
 
 Each round snapshot is appended to `Result.rounds[]` via `$push` immediately after `closeRoundOnce` freezes the tally. A partial `Result` document is created at the first round close if one does not already exist. On session completion, `persistCompletedResult` detects the existing document and updates it with `winner` and `completedAt` rather than creating a duplicate.
+
+### Amendment: the broadcast guard at `ROUND_CLOSED` (2026-10-05)
+
+`AC-3` has always named `ROUND_CLOSED` as a state where `rounds[]` is included, but the guard in `server.js` released history only at `RESULTS_REVEALED` and at completion, and a unit test pinned that stricter behaviour. Reviewed and settled: **the code was wrong, not the contract.** `rounds[]` is the history of rounds that have already closed, and `closeRoundOnce` freezes that tally before it sets the lifecycle, so nothing accrues between the close and the reveal. Withholding it buys no privacy, and it leaves a latent trap for any client written against `AC-3`.
+
+`finalVote` is deliberately *not* released at `ROUND_CLOSED`, and neither is the live `vote.tally`. Both carry the round that has just closed and is still waiting for its reveal, and the project rule is that a frozen tally appears at the reveal or at completion. So the three carriers are gated by two rules rather than by one flag, which is the change this amendment makes to the contract text, the key invariants, the build plan and the value sourcing table. An inline cross check of this amendment is what surfaced the third carrier: a single `tallyVisible` flag would have satisfied the `rounds[]` half of `AC-3` while quietly publishing the just closed round's tally through `vote.tally` one tick before its reveal.
+
+One honest caveat, recorded so nobody reads this as a user visible fix. `ROUND_CLOSED` is assigned by `closeRoundOnce` and overwritten with `RESULTS_REVEALED` in the same tick, because `resolveRevealDuration` clamps to a minimum of 1 second and `timerManager.startRevealTimer` is always present in a supported configuration. No broadcast has ever been observed carrying `ROUND_CLOSED`, so this amendment closes a divergence between code and contract rather than a reported symptom. It matters for the day the state becomes observable: a degraded reveal timer, a future pause or resume, or the crash resume work in [0009](../specs/0009-crash-resume-round-state/index.md) that can restore a lifecycle from the database. At that point the contract already says the right thing and no client breaks.
+
+Options weighed and rejected: keep the stricter code and amend `AC-3` down to `RESULTS_REVEALED` and completion, which is a smaller diff but pins an accidental behaviour into the contract and hides the reason from the next reader; or release `finalVote` at `ROUND_CLOSED` too, which gives the simplest possible rule, "strip only during `VOTING`", at the cost of publishing a round's result before its reveal.
 
 ## Rationale
 
@@ -134,13 +144,18 @@ Socket actions (server dispatched, never from client):
 | Totals panel | Total votes per candidate | Derived: client sums each candidate's votes across all rounds in `rounds[]` |
 | Totals panel | Rounds played | Derived: `rounds.length` |
 | GET `/api/sessions/:sessionId/rounds` | `rounds` | `Result.findOne({ sessionId }).select('rounds sessionId')` |
-| Broadcast guard | Whether to include `rounds[]` | `roundLifecycle` value from session state (`VOTING` → strip, else include) |
+| Broadcast guard | Whether to include `rounds[]` | `roundLifecycle` value from session state (`VOTING` → strip, else include); a recovered `pending` session with no live round also includes its settled history |
+| Broadcast guard | Whether to include `finalVote` | `roundLifecycle` is `RESULTS_REVEALED` or the session is `completed`; withheld at `VOTING`, `ROUND_CLOSED` and `TIE_PENDING`, because it carries the round that has not been revealed yet |
+| Broadcast guard | Whether to include the live `vote.tally` | Same source as `finalVote`, and the same rule: withheld at `VOTING`, `ROUND_CLOSED` and `TIE_PENDING`, emptied to `{}` rather than deleted, so the client keeps the vote shape |
 
 **Key invariants**:
 - A round snapshot is appended exactly once per round closure (idempotent via `roundIndex` monotonicity: if `rounds[]` already contains a snapshot with the same `roundIndex`, skip the append).
 - `rounds[]` is never mutated after append. Snapshots are frozen and immutable.
 - The `Result` document is created on first round close with `rounds: []` and `winner: null`. `persistCompletedResult` on session completion detects the existing doc and sets `winner` and `completedAt` without overwriting `rounds`.
-- `rounds[]` is stripped from the session broadcast payload when `roundLifecycle` is `VOTING`.
+- `rounds[]` is stripped from the session broadcast payload when `roundLifecycle` is `VOTING`. A recovered session with no live round is not a `VOTING` case: its settled history is already public, so it is served rather than withheld.
+- `rounds[]` and `finalVote` are gated separately. `rounds[]` releases when a round closes, because `closeRoundOnce` has already frozen that tally and nothing accrues between the close and the reveal. `finalVote` releases only at a reveal or a conclusion, so the current round's result is never published before its reveal. The live `vote.tally` follows `finalVote`, since at `ROUND_CLOSED` it holds the same frozen numbers, and is emptied to `{}` rather than deleted so the client keeps the vote shape. Do not collapse these into a single flag; that is what made the implementation stricter than this contract, and it would also publish the just closed round's tally through `vote.tally` while still withholding it through `finalVote`.
+- The two read paths need different amounts of work. The socket payload carries all three carriers, so the guard has to separate them. The `GET /rounds` endpoint passes only `{ status, rounds }`, so releasing history at `ROUND_CLOSED` changes its response and nothing else there.
+- No client change is needed for this amendment. `getGuardedResultsPresentation` already maps `roundLifecycle` `ROUND_CLOSED` to the `RESULTS_REVEALED` visibility state, so the results page is already prepared to render history in that state. The server was the only side withholding it.
 - `core.js` is not modified.
 
 **Security model**:
@@ -165,7 +180,7 @@ Ordered as Tracer Bullet slices: each task delivers a thin end to end strand thr
 
 2. **APPEND_ROUND_RESULT reducer and server dispatch** — Add `APPEND_ROUND_RESULT` case to `reducer.js` that appends a round snapshot to `sessions.<sessionId>.rounds` (an Immutable List), guarded by `roundIndex` idempotency. Dispatch `APPEND_ROUND_RESULT` from the caller of `closeRoundOnce` in `server.js` after both the close and the subsequent `NEXT` dispatch, deriving `resolution` from the frozen tally and `advanced` from the post `next()` session state (if `winner` is set, `advanced` is `null`; otherwise the candidates who survived). Register `APPEND_ROUND_RESULT` in the client's `LOCAL_ACTION_TYPES` so it is never echoed back. Satisfies **AC-1**.
 
-3. **Broadcast guard: strip rounds during VOTING** — In the session state serialization (the subscriber that broadcasts to clients in `server.js`), strip the `rounds` key from the payload when `roundLifecycle` is `VOTING`. Include it in all other lifecycle states and when the session status is `completed`. Satisfies **AC-3**, **AC-9**.
+3. **Broadcast guard: strip rounds during VOTING** — In the session state serialization (the subscriber that broadcasts to clients in `server.js`), strip the `rounds` key from the payload when `roundLifecycle` is `VOTING`. Include it in all other lifecycle states and when the session status is `completed`. Gate the other two carriers separately and identically to each other: strip `finalVote` and empty `vote.tally` during `VOTING`, `ROUND_CLOSED` and `TIE_PENDING`, and release them only at `RESULTS_REVEALED` or a conclusion. Satisfies **AC-3**, **AC-9**.
 
 4. **Client state: store rounds in voteSlice and derive totals** — Add `rounds` to the normalized session state in `voteSlice.js`. Add selectors: `selectSessionRounds(state, sessionId)`, `selectRoundTotals(state, sessionId)` (aggregates votes per candidate across all rounds and returns rounds played count). Add a `deriveTotals(rounds)` utility in `resultsUtils.js`. Satisfies **AC-5**.
 
@@ -194,8 +209,12 @@ Ordered as Tracer Bullet slices: each task delivers a thin end to end strand thr
 
 ## Follow-up
 
-- [ ] Phase 8 (Visibility and Privacy) must gate `GET /api/sessions/:sessionId/rounds` for secured sessions (only approved participants and admin).
-- [ ] When Phase 4 (Single Ballot Mode) ships, the `resolution` field will need to populate the additional enum values (`runoff`, `admin_pick`, `coin_flip`, `no_result`, `zero_vote_replay`).
+- [x] Phase 8 (Visibility and Privacy) must gate `GET /api/sessions/:sessionId/rounds` for secured sessions (only approved participants and admin).
+- [x] Align the guard in `applyTallyVisibilityGuard` with the amended `AC-3`: release `rounds[]` at `ROUND_CLOSED`, and keep `finalVote` and the live `vote.tally` withheld there. The existing guard test that asserts both carriers are stripped at `ROUND_CLOSED` has to be split per carrier rather than deleted, and a third case has to assert that the `vote` shape survives with an emptied tally.
+- [x] Re-run `/check verify round history and full results` after that change. The current `verify.md` records `ROUND_CLOSED` as never observed in a broadcast and treats the criterion as holding on the states that actually occur; that note has to be refreshed against the split test.
+- [x] `TIE_PENDING` withholding is now stated in `AC-3` rather than left implicit, but it is asserted only indirectly. Give it its own case when the tie ladder spec next grows.
+- [x] Run `/sync` after the guard changes. The root `AGENTS.md` rule describing `applyTallyVisibilityGuard` currently says it withholds `rounds` and `finalVote` together, which is exactly the wording this amendment corrects; leaving it would have the next task read a rule the code no longer follows.
+- [x] When Phase 4 (Single Ballot Mode) ships, the `resolution` field will need to populate the additional enum values (`runoff`, `admin_pick`, `coin_flip`, `no_result`, `zero_vote_replay`).
 
 ## Migration plan
 

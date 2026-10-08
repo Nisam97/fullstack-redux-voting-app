@@ -28,8 +28,16 @@
   box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
 }
 
+/*
+  An inactive card used to fade the whole card with `opacity: 0.65`. That dims
+  the text with it, and the tally label landed at 2.35:1 against its own badge
+  (WCAG 2.1 SC 1.4.3, AA). The state is now carried by the dropped elevation,
+  the fainter border and the desaturation, so the text keeps the contrast it
+  has when the card is active.
+*/
 .vote-card.vote-card-inactive {
-  opacity: 0.65;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
   filter: grayscale(20%);
 }
 
@@ -50,8 +58,13 @@
   border: 2px solid rgba(255, 255, 255, 0.12);
 }
 
+/*
+  Both stops are checked against the white initials: #047857 is 5.24:1 and
+  #059669 is 3.6:1, so the lighter end still clears the 3:1 large-text bar at
+  28px bold. The previous #10b981 was 2.42:1 and failed it.
+*/
 .vote-card-voted .vote-card-avatar {
-  background: linear-gradient(135deg, #059669, #10b981);
+  background: linear-gradient(135deg, #047857, #059669);
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
 }
 
@@ -124,15 +137,27 @@
   outline-offset: 2px;
 }
 
+/*
+  A flat slate fill rather than `opacity: 0.6`, for the same reason: opacity
+  dims the label along with the fill. #e2e8f0 on #334155 is 7.4:1, and a flat
+  fill is a background a contrast checker can actually resolve, unlike the
+  gradient it replaces.
+*/
 .vote-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  background: #334155;
+  color: #e2e8f0;
   box-shadow: none;
   transform: none;
 }
 
+/*
+  The button label is 16px, so both stops have to clear 4.5:1 against white:
+  #047857 is 5.24:1 and #065f46 is 7.34:1. The old pair ran 3.6:1 to 2.42:1,
+  which failed AA while a round was still open and the voted button was live.
+*/
 .vote-btn.vote-btn-voted {
-  background: linear-gradient(135deg, #059669, #10b981);
+  background: linear-gradient(135deg, #047857, #065f46);
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
 }
 

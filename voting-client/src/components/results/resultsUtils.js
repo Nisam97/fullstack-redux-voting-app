@@ -15,6 +15,91 @@ import { isTimerExpired } from '../../utils/timerUtils.js';
 export const CONTENDER_COLORS = ['#6366f1', '#ec4899'];
 
 /**
+ * Escapes one CSV cell (RFC 4180).
+ *
+ * A cell containing a comma, a quote, or a line break is wrapped in quotes and
+ * its quotes are doubled. A cell that begins with `=`, `+`, `-`, or `@` is
+ * prefixed with a single quote, because a spreadsheet treats that leading
+ * character as the start of a formula. Voter display names are attacker
+ * controlled, and this file is opened in a spreadsheet by an admin, so without
+ * that guard a name like `=1+1` would be evaluated on open.
+ *
+ * @param {*} value
+ * @returns {string} The escaped cell.
+ */
+function escapeCsvCell(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  if (/[",\n\r]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
+  }
+  return guarded;
+}
+
+/**
+ * Builds the admin per round turnout export as CSV text.
+ *
+ * Every round of the session appears, including a round nobody voted in, which
+ * keeps a zero turnout round visible in a spreadsheet instead of vanishing.
+ * The round order is the order the server sent (ascending `roundIndex`); this
+ * does not re-sort it, because the server owns that ordering.
+ *
+ * There is no vote choice column, and there cannot be: the turnout payload
+ * carries only who voted in a round (spec 0008 AC-7, AC-10).
+ *
+ * @param {Array<{ roundIndex: number, roundId: string, voters: Array<{ name: string, email: string }> }>} turnout
+ * @returns {string} CSV text, lines separated by CRLF.
+ */
+export function buildTurnoutCsv(turnout = []) {
+  const rows = [['roundIndex', 'roundId', 'voterCount', 'voterName', 'email']];
+  const rounds = Array.isArray(turnout) ? turnout : [];
+
+  for (const round of rounds) {
+    if (!round || typeof round !== 'object') {
+      continue;
+    }
+    const voters = Array.isArray(round.voters) ? round.voters : [];
+    const roundId = round.roundId || '';
+    const voterCount = voters.length;
+
+    if (voterCount === 0) {
+      rows.push([round.roundIndex, roundId, 0, '', '']);
+      continue;
+    }
+
+    for (const voter of voters) {
+      rows.push([
+        round.roundIndex,
+        roundId,
+        voterCount,
+        (voter && voter.name) || '',
+        (voter && voter.email) || ''
+      ]);
+    }
+  }
+
+  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
+}
+
+/**
+ * Builds a safe download filename for a session's turnout export.
+ *
+ * The session id comes from the route, so it is reduced to characters that
+ * cannot escape the downloads folder or confuse a file manager. Dots are not
+ * allowed either: a `..` left in a download name is pointless here and reads
+ * like a path traversal.
+ *
+ * @param {string} sessionId
+ * @returns {string}
+ */
+export function turnoutCsvFilename(sessionId) {
+  const safe = String(sessionId == null ? '' : sessionId)
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `turnout-${safe || 'session'}.csv`;
+}
+
+/**
  * Calculates percentage of votes with safe zero-division handling.
  * Rounds to 1 decimal place. Never returns NaN or Infinity.
  *
@@ -370,20 +455,16 @@ export const RESOLUTION_LABELS = {
  */
 export function formatResolution(resolution, advanced = []) {
   if (!resolution || typeof resolution !== 'string') return '';
-  if (resolution === 'majority_win' || resolution === 'WINNER') {
+  // Legacy aliases predate the persisted enum and keep their own wording.
+  if (resolution === 'WINNER') {
     if (Array.isArray(advanced) && advanced.length > 0) {
       return `Winner: ${advanced[0]}`;
     }
     return 'Winner declared';
   }
-  if (resolution === 'tie_advance' || resolution === 'TIE_REQUEUED') {
-    return 'Tie — Re-queued';
-  }
-  if (resolution === 'TIE_COIN_TOSS') {
-    return 'Tie — Decided by coin toss';
-  }
-  if (resolution === 'coin_flip') {
-    return 'Coin Flip';
+  // A named winner is more informative than the settlement method alone.
+  if (resolution === 'majority_win' && Array.isArray(advanced) && advanced.length > 0) {
+    return `Winner: ${advanced[0]}`;
   }
   return RESOLUTION_LABELS[resolution] || 'Round complete';
 }
@@ -428,6 +509,15 @@ export function deriveTotals(rounds = []) {
     const candidatesInRound = Array.isArray(round.candidates)
       ? round.candidates
       : Object.keys(round.tally);
+
+    // A round that closed with no votes still has a known roster, so seed every
+    // candidate in it at zero. Building totals from the tally alone dropped them,
+    // which left the totals panel with nothing to render for a zero-vote
+    // tournament such as a `no_result` completion (AC-5).
+    for (const cand of candidatesInRound) {
+      if (typeof cand !== 'string' || !cand) continue;
+      if (totals[cand] === undefined) totals[cand] = 0;
+    }
 
     for (const [candidate, count] of Object.entries(round.tally)) {
       const votes = typeof count === 'number' && Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;

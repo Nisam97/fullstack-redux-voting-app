@@ -6,6 +6,12 @@ export const INITIAL_STATE = fromJS({
   sessions: {}
 });
 
+// The only statuses startup recovery is allowed to put a session back into.
+// 'open' is deliberately absent: an interrupted session is reset to 'pending'
+// because its mid round state cannot be reconstructed, and 'archived' is not
+// loaded into the store at all.
+const RECOVERABLE_RECOVERY_STATUSES = ['pending', 'completed'];
+
 export default function reducer(state = INITIAL_STATE, action) {
   if (!action || typeof action !== 'object' || !action.type) {
     return state;
@@ -402,6 +408,27 @@ export default function reducer(state = INITIAL_STATE, action) {
       return currentState.setIn(['sessions', sessionId], session);
     }
 
+    // Startup recovery only. CREATE_SESSION always lands a session as
+    // 'pending', so a session MongoDB had already recorded as completed came
+    // back looking brand new: no winner, and, because the round history guard
+    // keys on a concluded status, no rounds in the broadcast or in the rounds
+    // endpoint either. Restores the recorded outcome only. The bracket, the
+    // timer and the round history are untouched, and a status outside the
+    // recoverable set is ignored so this can never put a session into 'open'
+    // or 'archived' behind the lifecycle guards.
+    case 'RESTORE_SESSION_OUTCOME': {
+      const sessionId = action.sessionId || action.electionId;
+      if (!sessionId || !currentState.hasIn(['sessions', sessionId])) return currentState;
+      if (!RECOVERABLE_RECOVERY_STATUSES.includes(action.status)) return currentState;
+      const winner = (typeof action.winner === 'string' && action.winner.length > 0)
+        ? action.winner
+        : null;
+      const session = currentState.getIn(['sessions', sessionId])
+        .set('status', action.status)
+        .set('winner', winner);
+      return currentState.setIn(['sessions', sessionId], session);
+    }
+
     case 'ARCHIVE_SESSION': {
       const sessionId = action.sessionId || action.electionId;
       if (!sessionId || !currentState.hasIn(['sessions', sessionId])) {
@@ -435,6 +462,21 @@ export default function reducer(state = INITIAL_STATE, action) {
         return currentState;
       }
       return currentState.setIn(['sessions', sessionId, 'whoCanJoin'], whoCanJoin);
+    }
+
+    // Spec 0008 AC-3: writes the admin publish switch onto the live store
+    // session. Accepted even when the session is archived, because archiving is
+    // a post completion action and must not strand a result. The action handler
+    // is the authority on status validation.
+    case 'SET_PUBLISH_RESULTS': {
+      const sessionId = action.sessionId || action.electionId;
+      if (!sessionId || typeof sessionId !== 'string' || !currentState.hasIn(['sessions', sessionId])) {
+        return currentState;
+      }
+      if (typeof action.publishResultsPublicly !== 'boolean') {
+        return currentState;
+      }
+      return currentState.setIn(['sessions', sessionId, 'publishResultsPublicly'], action.publishResultsPublicly);
     }
 
     case 'APPEND_ROUND_RESULT': {

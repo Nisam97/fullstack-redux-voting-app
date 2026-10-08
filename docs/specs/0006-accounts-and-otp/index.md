@@ -1,7 +1,7 @@
 # 0006. Accounts and OTP
 
 **Date**: 2026-09-28
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

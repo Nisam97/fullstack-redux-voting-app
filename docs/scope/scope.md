@@ -26,10 +26,11 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 4 | Round history and full results | Phase 3 | done |
 | 5 | Single ballot mode and tie ladder | Phase 4 | done |
 | 6 | Eligibility and presence | Phase 5 | done |
-| 7 | Accounts and OTP | Phase 6 | in-progress |
-| 8 | Secured sessions | Phase 7 | in-progress |
-| 9 | Visibility and privacy | Phase 8 | planned |
-| 10 | Hardening and docs | Phase 9 | planned |
+| 7 | Accounts and OTP | Phase 6 | done |
+| 8 | Secured sessions | Phase 7 | done |
+| 9 | Visibility and privacy | Phase 8 | done |
+| 10 | Hardening and docs | Phase 9 | in-progress |
+| 11 | Lobby existence gate | Phase 9 | done |
 
 ---
 
@@ -170,7 +171,7 @@ spec [0005](../specs/0005-eligibility-and-presence.md) · code in `voting-server
 
 ## Phase 6: Accounts and OTP
 
-### 7. Accounts and OTP · GA · in-progress
+### 7. Accounts and OTP · GA · done
 Add `User` (email, name, timestamps) and `OtpChallenge` (email, codeHash, expiresAt, attempts, lastSentAt, consumedAt with TTL index) Mongoose models. Wire Nodemailer with Gmail SMTP; if SMTP is not configured, log the OTP to the server console instead. REST endpoints: `POST /api/auth/otp/request`, `POST /api/auth/otp/verify`, `POST /api/auth/profile`, `GET /api/auth/voter/me`, `POST /api/auth/logout`. Issue a signed `vs_voter` cookie: `httpOnly`, `SameSite=Lax`, 7-day TTL. Enable CORS with `credentials: true` for the client origin. OTP: 6 digits, 10-minute TTL, hashed at rest, single use, 5 wrong attempts locks the challenge, 60 s resend cooldown, generic response that never reveals email eligibility. Add a visible Log out button.
 **Done when:** passwordless login works locally end-to-end (request OTP, verify, set profile, cookie set); cookie has correct flags; logout clears cookie; 5-attempt lock, cooldown, and single-use enforcement are tested; OTP never appears in a response body; SMTP fallback logs to console; existing suites pass.
 spec [0006](../specs/0006-accounts-and-otp/index.md) · code in `voting-server/src/auth/`, `voting-server/src/email/`, `voting-server/src/db/models/`, `voting-server/src/server.js`, `voting-client/src/`
@@ -190,7 +191,7 @@ spec [0006](../specs/0006-accounts-and-otp/index.md) · code in `voting-server/s
 
 ## Phase 7: Secured Sessions
 
-### 8. Secured sessions · GA · in-progress
+### 8. Secured sessions · GA · done
 Add `SessionParticipant` (sessionId, email, userId, status, joinedAt, decidedAt) and `VoteParticipation` (sessionId, roundId, userId; stores only that a vote happened, never the choice) Mongoose models. Implement both "Who can join" modes: Listed emails only (allowlist CSV with line-numbered validation, locked at Start, server-side eligibility check on every entry) and Anyone with the code, admin approves (pending queue, approve/reject controls, queue closes at Start). Socket identity on lobby and vote sockets comes from the `vs_voter` handshake cookie only. Admin lobby view shows allowlisted/joined/pending counts. New socket actions: `SET_ALLOWLIST`, `APPROVE_PARTICIPANT`, `REJECT_PARTICIPANT`, `REMOVE_PARTICIPANT`. Secured users bypass OTP on a valid cookie but eligibility is rechecked for each session.
 **Done when:** both "Who can join" modes work end-to-end; removing an email in lobby drops that person immediately; the pending queue closes at Start; `VoteParticipation` stores no vote choice; duplicate secured vote is blocked after a simulated restart; emails never appear in voter-facing payloads; existing suites pass.
 spec [0007](../specs/0007-secured-sessions/index.md) · code in `voting-server/src/db/models/`, `voting-server/src/server.js`, `voting-server/src/auth/`, `voting-client/src/`
@@ -200,28 +201,72 @@ spec [0007](../specs/0007-secured-sessions/index.md) · code in `voting-server/s
   - [x] Allowlist and approval join gating, actions, and auto-reject (AC-3, AC-4, AC-5, AC-6, AC-8, AC-15)
   - [x] Participant management (SET_WHO_CAN_JOIN, REMOVE_PARTICIPANT, session_participants) (AC-2, AC-7, AC-10, AC-11, AC-14)
   - [x] VoteParticipation audit trail, vote flow integration, and client secured UI (AC-11, AC-12, AC-13, AC-15, AC-16)
-- [ ] Verify it: `/check verify secured sessions`
-- [ ] Test it: `/test secured sessions`
-- [ ] Review it (fresh model): `/check review secured sessions`
-- [ ] Document it: `/document secured sessions`
+- [x] Verify it: `/check verify secured sessions`
+- [x] Test it: `/test secured sessions`
+  - [x] 2026-10-05 pass: `voting-server/test/voter_revocation_unit_spec.js` is new and pins `revokeSessionVoter` and `revokeSessionVoters` at the module level, which the socket level spec could only reach indirectly: the cross session guard, the `tokensBySession` shortcut hole the helper exists to close, the anonymous token skip, whitespace trimming, and idempotence (AC-3, AC-8)
+  - [x] `voting-server/test/reducer_spec.js` gained the `SET_PUBLISH_RESULTS` reducer guards: a non boolean flag, a missing or unknown session, the `electionId` alias, an archived session, and no mutation of the state it was handed (AC-3)
+  - [x] `voting-server/test/db_models_spec.js` gained the `Result.type` and `publishResultsPublicly` defaults, the enum rejection of an unknown type, and the compound index the archive query leans on (AC-9)
+- [x] Review it (fresh model): `/check review secured sessions`
+- [x] Document it: `/document secured sessions`
 
 ---
 
 ## Phase 8: Visibility and Privacy
 
-### 9. Visibility and privacy · needs a decision · GA · planned
+### 9. Visibility and privacy · GA · done
 Enforce the results visibility matrix: public session results are visible to all; secured session results are visible only to approved participants (signed in) and the admin; `GET /api/sessions/history` returns public sessions and published secured results only. Add the admin per-session Publish results publicly toggle (`SET_PUBLISH_RESULTS` socket action). Admin can see per-round turnout (who voted per round, not for whom) in the admin panel. Ensure emails and allowlists never reach voter-facing REST or socket payloads at any point.
 **Done when:** the visibility matrix is fully tested; the publish toggle flips a secured result into `/history`; an unpublished secured result is absent from `/history`; per-round turnout is visible only to the admin; no voter-facing payload contains an email.
-- [ ] Design it (spec): `/architect visibility and privacy`
+spec [0008](../specs/0008-visibility-and-privacy/index.md)
+- [x] Design it (spec): `/architect visibility and privacy`
+- [x] Build it: `/develop visibility and privacy`
+  - [x] Result schema fields, the completion write, the backfill, and the create form cleanup (AC-9, AC-11)
+  - [x] Shared visibility resolver and the read gates over history, result, rounds, and lobby (AC-1, AC-2, AC-4, AC-5, AC-6)
+  - [x] `SET_PUBLISH_RESULTS` action, reducer case, and store update (AC-3)
+  - [x] Admin turnout view over REST and socket (AC-7, AC-8)
+  - [x] Client publish toggle, turnout panel, gated states, and the payload leak guard (AC-12, AC-10, AC-13)
+  - code in `voting-server/src/server.js`, `voting-server/src/db/models/Result.js`, `voting-server/src/db/repository.js`, `voting-server/src/reducer.js`, `voting-client/src/pages/Results.jsx`, `voting-client/src/pages/History.jsx`, `voting-client/src/redux/voteSlice.js`
+- [x] Verify it: `/check verify visibility and privacy`
+- [x] Test it: `/test visibility and privacy`
+  - [x] Server gaps closed in `voting-server/test/visibility_and_privacy_spec.js`: public flag off, lobby winner, approval mode eligibility, 404 parity with a missing result, `VALIDATION_ERROR` and `SESSION_NOT_FOUND`, Session and Result drift both directions, published rounds, history membership, signed in outsider on a live session, live turnout from the round manager, the anonymous vote refusal, the turnout admin gate, the completion write, and the archive round trip (a legacy public row reappears only once the backfill gives it a type, while a legacy secured row does not) (AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10)
+  - [x] Client component tests in `voting-client/test/results_visibility.test.jsx` for the gated panel, the admin toggle and turnout panel, the acknowledgement driven publish toggle, the public session copy, and the non admin view (AC-1, AC-3, AC-7, AC-8, AC-10, AC-12)
+  - [x] Create form has no publish control in `voting-client/test/admin_roster_resubscribe.test.jsx` (AC-11)
+  - [x] 2026-10-05 pass: `voting-server/test/visibility_matrix_unit_spec.js` is new and pins the five exported helpers in `src/server.js` directly, so the matrix no longer depends on an end to end caller reaching each branch: `filterSessionsForCaller`, `getAdminTokenFromRequest`, `getSocketSessionsSummary` across all three admin token sources, `isApprovedParticipant` including the fail closed lookup, and `resolveResultVisibility` across every viewer kind (AC-1, AC-2, AC-4, AC-6)
+  - [x] `voting-server/test/visibility_and_privacy_spec.js` gained the completion write precedence (the persisted `Session` row wins over the live store copy), both fall back branches when no publish switch is named anywhere, the rewrite of the visibility fields when a partial row is completed, and the `no_result` completion in `roundManager.js`, which had no coverage at all (AC-1, AC-2, AC-5, AC-9)
+  - [x] Client: `voting-client/test/results_visibility.test.jsx` gained the archive type badge cases, including that the badge reads the same for the admin, an anonymous caller and a signed in participant. That is the automated half of the "vary the viewer" step the `/check verify` record left open, and `voting-client/test/visibility_privacy_client_spec.js` gained the anonymous read sending no `Authorization` header, the rounds read carrying the same headers as the result read, and the turnout subscription guards (AC-4, AC-7, AC-9, AC-10)
+- [x] Review it (fresh model): `/check review visibility and privacy`
+- [x] Document it: `/document visibility and privacy`
+  - Changelog entry appended to `docs/CHANGELOG.md` (Phase 8: Visibility and Privacy, spec 0008)
 
 ---
 
 ## Phase 9: Hardening and Docs
 
-### 10. Hardening and docs · planned
+### 10. Hardening and docs · in-progress
 Add rate limits on `POST /api/auth/otp/request` (5 req/hour/email, 20/hour/IP) and `GET /api/join/:code` (30/min/IP). Enforce timing parity on OTP and join-code responses so guessing yields no timing signal. Accessibility pass (WCAG 2.1 AA on voting and lobby screens). Update `README`, `ARCHITECTURE.md`, `API_CONTRACT.md`, and `USER_MANUAL.md` for v2. Run all suites, lint, and build.
 **Done when:** rate limits are enforced and tested; OTP and join code responses have similar timing; axe reports no critical accessibility violations on voting screens; all suites pass; lint and build are green.
-- [ ] `/develop hardening and docs`
+- [x] Build it: `/develop hardening and docs`
+  - [x] Shared fixed window limiter, OTP request ceilings (5/hour/email, 20/hour/IP) enforced before any database work, `429` with `Retry-After` (AC-1)
+  - [x] Response timing floor on the OTP request and join resolver paths, with the join resolver moved onto the shared limiter unchanged (AC-1, AC-2)
+  - [x] axe audit of the voting arena, join prompt, and four lobby states, plus the join alert role and the navbar nested control fix (AC-3)
+  - [x] `README`, `ARCHITECTURE.md`, `API_CONTRACT.md`, `USER_MANUAL.md`, `CHANGELOG.md`, and `.env.example` updated for v2 (AC-4, AC-5)
+  - [x] Full server and client suites, client lint, and production build green (AC-4, AC-5)
+  - code in `voting-server/src/utils/rateLimit.js`, `voting-server/src/utils/timing.js`, `voting-server/src/server.js`, `voting-client/test/a11y_voting_and_lobby.test.jsx`, `voting-client/src/pages/Voting.jsx`, `voting-client/src/components/layout/Navbar.jsx`
+- [x] Verify it: `/check verify hardening and docs` (2026-10-06 runtime pass: all three ceilings hit live over HTTP with `Retry-After`, timing parity measured at 10 samples per class, axe clean in a real browser on lobby and vote screens, server 799 and client 468 plus 127 green, lint and build exit 0)
+- [x] Test it: `/test hardening and docs` (2026-10-07: 14 tests added, 9 in a new navbar a11y suite closing the untested Navbar nesting fix and logout flows, 5 unit edges for the rate limit and timing modules. Server 804 passing, client 468 unit plus 136 component passing, lint clean, all exit 0)
+
+### 11. Lobby existence gate · from spec 0008 · done
+Gate `GET /api/sessions/:id/lobby` so a secured session the caller may not read answers the same `404`, with the same body, that an unknown session id answers, and replace the client "Session Not Found" panel with one neutral not available state carrying a sign in prompt. Closes the last voter facing surface where holding a session id still confirmed that a gated secured session exists.
+**Done when:** an anonymous caller and a signed in non participant both get the unknown id `404` body from the lobby of an unpublished secured session; the admin and an approved participant still get `200` with full metadata; a public session lobby read is unchanged; the client renders identical neutral copy for a missing session and a gated one, and that copy never claims the session does not exist.
+spec [0008](../specs/0008-visibility-and-privacy/index.md) (amendment of 2026-10-04, AC-14 and AC-15)
+- [x] Design it (spec): `/architect visibility and privacy`
+- [x] Build it: `/develop lobby existence gate`
+  - [x] Lobby read gate: run the shared resolver on both the in memory and the database path, and answer a gated secured session with the unknown id body (AC-14)
+  - [x] Client lobby fetch credentials, plus the neutral not available state that replaces the Session Not Found panel and its discovery link (AC-14, AC-15)
+  - [x] Tests: the secured lobby case rewritten in `voting-server/test/visibility_and_privacy_spec.js` as a deliberate contract change, a client neutral state case, and the public session lobby read left unchanged (AC-14, AC-15, AC-13)
+  - code in `voting-server/src/server.js`, `voting-client/src/pages/Lobby.jsx`, `voting-server/test/visibility_and_privacy_spec.js`, `voting-client/test/lobby_secured.test.jsx`
+  - Note: the unknown session message no longer echoes the requested id (`Session was not found.`). Echoing it made byte identical bodies impossible across two different ids, which AC-14 requires.
+- [x] Verify it: `/check verify lobby existence gate` (2026-10-05 runtime pass: four caller kinds over REST and in a real browser, the publish flag flipped open and closed again, the public lobby unchanged, both suites and lint and build green, zero server or client errors)
+- [x] Test it: `/test lobby existence gate` (2026-10-05: 8 tests added in the two existing spec files, closing the approval mode and forged credential gaps on the server plus accessibility coverage of the neutral state. Server 701 passing, client 456 unit plus 82 component passing, lint clean, all exit 0)
 
 ---
 
@@ -236,6 +281,7 @@ Out of scope for v1, kept so the plan stays honest.
 - **Social and SSO login**: OAuth providers for voter auth.
 - **Ranked-choice or multi-select ballots**: alternative ballot types.
 - **Deployment and hosting**: infrastructure, CI/CD, production config.
+- **Turnout CSV export**: delivered in Phase 8 as a browser side export (`buildTurnoutCsv` plus a Download CSV button inside the admin gated turnout panel). Removed from this list.
 
 ---
 

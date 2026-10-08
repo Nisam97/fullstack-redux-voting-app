@@ -1,7 +1,7 @@
 # 0007. Secured Sessions
 
 **Date**: 2026-09-29
-**Status**: Implemented
+**Status**: Accepted
 
 ## Summary
 

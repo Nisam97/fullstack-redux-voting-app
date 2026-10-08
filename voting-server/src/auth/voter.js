@@ -296,6 +296,81 @@ export function releaseSessionVoters(sessionId) {
 }
 
 /**
+ * Revokes one signed in voter the server already issued. Removal is a
+ * security action, so it deletes the token from votersByToken itself: a
+ * token left only in tokensBySession still passes validateVoterToken through
+ * the `voter.sessionId === normSession` shortcut, and VOTE trusts that result.
+ *
+ * The cross session guard keeps a `user:<id>` identity that legitimately
+ * registered in a second session from being cleared. That is the same guard
+ * releaseSessionVoters uses, and it is the one case where such a token is
+ * intentionally shared between sessions.
+ *
+ * @param {string} sessionId - Session the voter belongs to.
+ * @param {string} userId - Server derived identity from the verified vs_voter
+ *        handshake cookie. Never a client supplied value.
+ * @returns {boolean} true when the token was revoked.
+ */
+export function revokeSessionVoter(sessionId, userId) {
+  if (!sessionId || !userId) return false;
+  const normalizedSessionId = sessionId.trim();
+  const normalizedUserId = String(userId).trim();
+  if (!normalizedUserId) return false;
+
+  const token = `user:${normalizedUserId}`;
+  const sessionTokens = tokensBySession.get(normalizedSessionId);
+  if (!sessionTokens || !sessionTokens.has(token)) return false;
+
+  for (const [otherSessionId, tokenSet] of tokensBySession.entries()) {
+    if (otherSessionId !== normalizedSessionId && tokenSet.has(token)) {
+      // Registered in another session too, so the roster entry is shared.
+      // Only the session scoped index entry is dropped here.
+      sessionTokens.delete(token);
+      return false;
+    }
+  }
+
+  if (votersByToken.delete(token)) {
+    sessionTokens.delete(token);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Revokes every signed in voter in a session. An allowlist paste that drops a
+ * joined email, a mode switch, and an approval rejection all mutilate the same
+ * record, so this helper keeps those controls from drifting apart.
+ *
+ * @param {string} sessionId - Session to run the revocation over.
+ * @returns {number} Number of signed in voters revoked.
+ */
+export function revokeSessionVoters(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string') return 0;
+  const normalizedSessionId = sessionId.trim();
+  const sessionTokens = tokensBySession.get(normalizedSessionId);
+  if (!sessionTokens) return 0;
+
+  let revoked = 0;
+  for (const token of [...sessionTokens]) {
+    if (!token.startsWith('user:')) continue;
+    let sharedWithOtherSession = false;
+    for (const [otherSessionId, tokenSet] of tokensBySession.entries()) {
+      if (otherSessionId !== normalizedSessionId && tokenSet.has(token)) {
+        sharedWithOtherSession = true;
+        break;
+      }
+    }
+    if (sharedWithOtherSession) continue;
+    if (votersByToken.delete(token)) {
+      sessionTokens.delete(token);
+      revoked += 1;
+    }
+  }
+  return revoked;
+}
+
+/**
  * Clears voters, recorded votes, and session headcount indices (for testing).
  */
 export function clearVoters() {

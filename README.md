@@ -1,9 +1,9 @@
 # VoteSphere — Full-Stack Real-Time Pairwise Voting Application
 
 [![CI Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-598%2F598%20passing-brightgreen.svg)](#testing--verification)
-[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-373%2F373%20passing-brightgreen.svg)](#testing--verification)
-[![Total Tests](https://img.shields.io/badge/total%20tests-971%20passing-brightgreen.svg)](#testing--verification)
+[![Backend Tests](https://img.shields.io/badge/backend%20tests-799%2F799%20passing-brightgreen.svg)](#testing--verification)
+[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-595%2F595%20passing-brightgreen.svg)](#testing--verification)
+[![Total Tests](https://img.shields.io/badge/total%20tests-1394%20passing-brightgreen.svg)](#testing--verification)
 [![ESLint](https://img.shields.io/badge/eslint-0%20errors-brightgreen.svg)](#testing--verification)
 [![Vite Build](https://img.shields.io/badge/vite%20build-passing-brightgreen.svg)](#testing--verification)
 [![Core Engine](https://img.shields.io/badge/core.js-protected%20pure-blue.svg)](#architecture)
@@ -86,7 +86,13 @@ All mathematical operations, vote tabulations, round advancements, duplicate-bal
 - Automatic recovery resets interrupted `open` sessions to `pending` on backend boot, restoring active tournaments cleanly into Redux memory.
 
 ### 9. Public Results History Archive
-- Public REST endpoints (`GET /api/sessions/history` and `GET /api/sessions/:sessionId/result`) serve completed tournaments, final champions, candidate rosters, and round-by-round tally histories.
+- Public REST endpoints (`GET /api/sessions/history` and `GET /api/sessions/:sessionId/result`) serve completed tournaments, final champions, candidate rosters, and round-by-round tally histories. A secured result joins the archive only once its admin publishes it.
+
+### 10. Hardening: Rate Limits, Timing Parity & Accessibility
+- **OTP request limits:** `POST /api/auth/otp/request` allows 5 requests per hour per email address and 20 per hour per client address. Both ceilings are checked before any database work or email send, and a refusal answers `429` with a `Retry-After` header.
+- **Join code limit:** `GET /api/join/:code` allows 30 requests per minute per client address.
+- **Timing parity:** the OTP request route and the join code resolver hold each response open until a minimum duration has elapsed (`API_MIN_RESPONSE_MS`, default 100 ms). Response time therefore cannot be measured to learn whether an address is registered or whether a join code exists, which the identical response bodies already refuse to say.
+- **Accessibility:** the voting arena and lobby screens are audited with `axe-core` for WCAG 2.2 AA structural rules in the component suite, and the audit carries a self check so an empty scan can never pass as clean.
 
 ---
 
@@ -162,11 +168,13 @@ fullstack-redux-voting-app/
 ├── .env.example                     # Environment template with documented defaults
 ├── .gitignore                       # Clean Git exclusion rules
 ├── AGENTS.md                        # Context and architecture guidelines
+├── Architecture.md                  # In-depth architectural documentation
+├── User Manual.md                   # End-user guide
+├── Manual Test.md                   # Manual QA test script
 ├── docs/                            # Specifications and architectural design notes
-│   ├── ARCHITECTURE.md              # In-depth architectural documentation
 │   ├── API_CONTRACT.md              # REST & Socket event schemas
 │   ├── VOTESPHERE_FULL_SPEC.md      # Comprehensive product specification
-│   ├── specs/                       # Numbered feature specifications (0001-0005)
+│   ├── specs/                       # Numbered feature specifications (0001-0009)
 │   └── reviews/                     # Verification audits & review logs
 ├── voting-client/                   # React 19 Frontend Application
 │   ├── package.json                 # Client dependencies and npm scripts
@@ -177,7 +185,7 @@ fullstack-redux-voting-app/
 │   │   ├── redux/                   # Redux Toolkit store, voteSlice, voterAuthSlice
 │   │   ├── routes/                  # App routing hierarchy
 │   │   └── services/                # Socket.io connection and REST API clients
-│   └── test/                        # 27 node:test specification suites (373 tests)
+│   └── test/                        # 32 node:test spec files (139 suites, 468 tests)
 └── voting-server/                   # Authoritative Backend Engine
     ├── package.json                 # Server dependencies and npm scripts
     ├── index.js                     # Server entrypoint and MongoDB connection
@@ -191,7 +199,7 @@ fullstack-redux-voting-app/
     │   ├── auth/                    # Admin JWT, voter tokens, OTP, voter cookies
     │   ├── db/                      # Mongoose connection, models, repository, persistence
     │   └── email/                   # Nodemailer OTP email transporter
-    └── test/                        # 32 Mocha test suites (598 tests)
+    └── test/                        # 47 Mocha spec files (799 tests)
 ```
 
 ---
@@ -319,6 +327,9 @@ All settings are configured via `.env` in the root folder. The backend automatic
 | `SMTP_PASS` | *(empty)* | SMTP password |
 | `MAIL_FROM` | `noreply@votesphere.local` | From address for outgoing voter OTP emails |
 | `OTP_TTL_MINUTES` | `10` | One-time password expiration window (minutes) |
+| `API_MIN_RESPONSE_MS` | `100` | Minimum response time for the OTP request and join code routes, in milliseconds. Set to `0` to disable |
+| `OTP_RATE_LIMIT_MAX_PER_EMAIL` | `5` | Hourly OTP request ceiling per email address |
+| `OTP_RATE_LIMIT_MAX_PER_IP` | `20` | Hourly OTP request ceiling per client address |
 | `VOTE_TIMER_DURATION` | `30` | Default round duration in seconds (5–300) |
 | `ROUND_REVEAL_DURATION`| `10` | Results reveal countdown window in seconds |
 | `VITE_SERVER_URL` | `http://localhost:8090` | *(Frontend)* Target backend WebSocket and API address |
@@ -339,9 +350,13 @@ All settings are configured via `.env` in the root folder. The backend automatic
 | `GET` | `/api/sessions/history` | Public | Retrieves paginated historical tournament completions |
 | `GET` | `/api/sessions/:id/result` | Public | Retrieves specific completed tournament outcome and full roster |
 | `GET` | `/api/sessions/:id/rounds` | Public | Retrieves round-by-round tally history (revealed rounds only) |
-| `POST` | `/api/auth/voter/request-otp` | Public | Requests a 6-digit OTP code for secured sessions |
-| `POST` | `/api/auth/voter/verify-otp` | Public | Verifies OTP code and sets session authentication cookie |
-| `GET` | `/api/auth/voter/me` | Voter | Returns current voter profile from authentication cookie |
+| `GET` | `/api/join/:code` | Public | Resolves a 6-character join code to session summary metadata (30 req/min/IP) |
+| `GET` | `/api/sessions/:id/turnout` | Admin | Per-round turnout (who voted in each round, never the choice) |
+| `POST` | `/api/auth/otp/request` | Public | Requests a 6-digit OTP code for a voter account (5/hour/email, 20/hour/IP) |
+| `POST` | `/api/auth/otp/verify` | Public | Verifies an OTP code and sets the `vs_voter` authentication cookie |
+| `POST` | `/api/auth/profile` | Voter | Sets the display name and username on a voter account |
+| `GET` | `/api/auth/voter/me` | Voter | Returns the current voter profile from the authentication cookie |
+| `POST` | `/api/auth/logout` | Voter | Clears the `vs_voter` authentication cookie |
 
 ### Socket.io Real-Time Events
 
@@ -369,23 +384,25 @@ VoteSphere maintains comprehensive test coverage across both frontend and backen
 cd voting-server
 npm test
 ```
-**Results:** **598 passing** (0 failing across 32 spec files in Mocha).
+**Results:** **799 passing** (0 failing across 47 spec files in Mocha).
 
 ### Execute Frontend Test Suite
 ```bash
 cd voting-client
-npm test
+npm test          # runs test:unit then test:component
+npm run test:unit      # node --test logic and reducer specs
+npm run test:component # Vitest + jsdom component, and axe accessibility, specs
 ```
-**Results:** **373 passing** (0 failing across 27 spec files in Node test runner).
+**Results:** **468 passing** (0 failing across 139 logic suites in the Node test runner) plus **127 passing** (0 failing across 6 component files under Vitest).
 
 ### Code Quality & Production Build
 ```bash
 cd voting-client
 npm run lint    # ESLint verification: 0 errors, 0 warnings
-npm run build   # Production Vite bundle: built cleanly in ~6 seconds
+npm run build   # Production Vite bundle: builds successfully (a >500 kB chunk-size warning may appear; exit code 0)
 ```
 
-**Overall Verified Status:** **971 automated tests passing**, 0 failing, 0 lint warnings.
+**Overall Verified Status:** **1394 automated tests passing** (799 backend + 468 unit + 127 component), 0 failing, 0 lint warnings. Accessibility on the voting and lobby screens is asserted with `axe-core` at the critical and serious level, and that scan carries a self check so an empty result cannot pass as clean.
 
 ---
 

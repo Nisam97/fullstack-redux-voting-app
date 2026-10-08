@@ -1,23 +1,28 @@
 import "./Testimonials.css";
 
-const reviews = [
+// Product-strength cards, not invented testimonials: fictional users with
+// invented quotes would not survive a question about who they are.
+const strengths = [
   {
-    name: "Ananya Sharma",
-    role: "College Coordinator",
-    review:
-      "VoteSphere made our student election simple, secure, and completely transparent."
+    icon: "🔐",
+    title: "Passwordless by design",
+    detail:
+      "Voters sign in with a one-time code sent to their email — no passwords stored, nothing to leak.",
+    tag: "Voter access"
   },
   {
-    name: "Rahul Menon",
-    role: "Event Organizer",
-    review:
-      "The live results and smooth voting experience impressed everyone in our organization."
+    icon: "⚖️",
+    title: "The server decides",
+    detail:
+      "Tallies, timers and round advancement run only on the backend. Clients render state and send intent.",
+    tag: "Integrity"
   },
   {
-    name: "Sarah Joseph",
-    role: "Faculty Advisor",
-    review:
-      "A modern and reliable platform that saved us hours during campus elections."
+    icon: "🧾",
+    title: "Audit-ready history",
+    detail:
+      "Every completed session is persisted with its full round-by-round history and final result.",
+    tag: "Transparency"
   }
 ];
 
@@ -27,22 +32,22 @@ function Testimonials() {
       <div className="container">
 
         <div className="section-title">
-          <h2>What Our Users Say</h2>
-         <p>Trusted by students, organizations and event managers.</p>
+          <h2>Built to Be Trusted</h2>
+          <p>What makes a VoteSphere session trustworthy.</p>
         </div>
 
         <div className="testimonial-grid">
 
-          {reviews.map((item, index) => (
+          {strengths.map((item, index) => (
             <div className="testimonial-card" key={index}>
 
-              <div className="quote">★★★★★</div>
+              <div className="quote">{item.icon}</div>
 
-              <p>{item.review}</p>
+              <p>{item.detail}</p>
 
-              <h3>{item.name}</h3>
+              <h3>{item.title}</h3>
 
-              <span>{item.role}</span>
+              <span>{item.tag}</span>
 
             </div>
           ))}

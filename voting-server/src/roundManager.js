@@ -1330,12 +1330,18 @@ export function executePendingRoundAdvance({
       repository.pushRoundToResult(sessionId, correctedSnapshot, { title, entries }).catch(err => {
         console.error(`[RoundManager] Failed to persist round snapshot for "${sessionId}":`, err.message);
       });
+      const noResultType = session ? (session.get('type') || 'public') : 'public';
+      const noResultPublishRaw = session ? session.get('publishResultsPublicly') : undefined;
       repository.saveResult({
         sessionId,
         title,
         entries,
         winner: null,
-        completedAt: new Date()
+        completedAt: new Date(),
+        type: noResultType,
+        publishResultsPublicly: noResultPublishRaw !== undefined
+          ? Boolean(noResultPublishRaw)
+          : noResultType !== 'secured'
       }).catch(err => {
         console.error(`[RoundManager] Failed to save no_result result for "${sessionId}":`, err.message);
       });

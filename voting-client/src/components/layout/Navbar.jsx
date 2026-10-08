@@ -116,10 +116,16 @@ function Navbar() {
           </>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Link to="/login" style={{ textDecoration: "none" }}>
-              <button className="login-btn">
-                Sign in
-              </button>
+            {/* A button wrapped in a link nests two interactive controls: the
+                link and the button are both exposed, so the same control is
+                announced and focused twice. One link styled as the button is
+                the whole control. */}
+            <Link
+              to="/login"
+              className="login-btn"
+              style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+            >
+              Sign in
             </Link>
           </div>
         )}

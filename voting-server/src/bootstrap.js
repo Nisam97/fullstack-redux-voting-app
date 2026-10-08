@@ -9,6 +9,18 @@ export const HORROR_SESSION_ID = 'sess_horror';
 export const HORROR_SESSION_TITLE = 'Horror Classics';
 export const HORROR_SESSION_ENTRIES = ['The Shining', 'Psycho', 'Alien'];
 
+/**
+ * Presentation mode switch. When SEED_AUTO_START is set to the literal "false"
+ * the seed sessions are created as pending waiting rooms instead of being
+ * started immediately. A pending session never runs round timers, so it cannot
+ * silently play itself to completion before the presenter reaches it; the
+ * admin starts it from the admin panel. Any other value (or unset) keeps the
+ * historical contract — bootstrap starts the session — which the specs pin.
+ */
+export function shouldAutoStartSeeds() {
+  return process.env.SEED_AUTO_START !== 'false';
+}
+
 // Backward compatibility exports
 export const DEFAULT_ELECTION_ID = DEFAULT_SESSION_ID;
 export const DEFAULT_ELECTION_TITLE = DEFAULT_SESSION_TITLE;
@@ -91,11 +103,15 @@ export function bootstrapDefaultSession(store, options = {}) {
     joinCode: options.joinCode || generateJoinCode()
   });
 
-  // 2. START_SESSION
-  store.dispatch({
-    type: 'START_SESSION',
-    sessionId
-  });
+  // 2. START_SESSION — skipped in presentation mode (see shouldAutoStartSeeds).
+  // The session stays pending: no timers run, nothing advances, and the admin
+  // opens voting from the panel when the audience is ready.
+  if (shouldAutoStartSeeds()) {
+    store.dispatch({
+      type: 'START_SESSION',
+      sessionId
+    });
+  }
 
   const state = store.getState();
   const updatedSessions = (state && typeof state.get === 'function')
@@ -159,11 +175,13 @@ export function bootstrapHorrorSession(store, options = {}) {
     joinCode: options.joinCode || generateJoinCode()
   });
 
-  // 2. START_SESSION
-  store.dispatch({
-    type: 'START_SESSION',
-    sessionId
-  });
+  // 2. START_SESSION — same presentation-mode gate as the default session.
+  if (shouldAutoStartSeeds()) {
+    store.dispatch({
+      type: 'START_SESSION',
+      sessionId
+    });
+  }
 
   const state = store.getState();
   const updatedSessions = (state && typeof state.get === 'function')

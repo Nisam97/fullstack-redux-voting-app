@@ -138,7 +138,7 @@ describe('AC-9 regression — frozen tally hiding across every broadcast surface
     expect(state).to.not.have.property('revealTimer');
   });
 
-  it('2. fresh subscriber during ROUND_CLOSED receives no frozen tally carrier', async () => {
+  it('2. fresh subscriber during ROUND_CLOSED receives the settled rounds but not the unrevealed tally', async () => {
     const sessionId = setupSession('sess_ac9_closed');
     const roundId = await castVotes(sessionId, { alpha: 2, beta: 1 });
 
@@ -152,8 +152,9 @@ describe('AC-9 regression — frozen tally hiding across every broadcast surface
     });
 
     // Move the store back to ROUND_CLOSED to model the guarded window: the
-    // round is closed but the reveal has not been reached. The serializer
-    // must strip the frozen carriers in this state.
+    // round is closed but the reveal has not been reached. The settled history
+    // is released (AC-3), while the round's own tally stays withheld until the
+    // reveal through `finalVote` and through the live `vote.tally`.
     store.dispatch({
       type: 'SET_ROUND_LIFECYCLE',
       sessionId,
@@ -167,8 +168,18 @@ describe('AC-9 regression — frozen tally hiding across every broadcast surface
 
     const state = await waitForSessionState(client, s => s.id === sessionId && s.roundLifecycle === 'ROUND_CLOSED');
 
+    // Carrier 1 of 3: settled history is public the moment the round closes.
+    expect(state.rounds).to.have.lengthOf(1);
+    expect(state.rounds[0].roundIndex).to.equal(1);
+    expect(state.rounds[0].tally).to.deep.equal({ Alpha: 2, Beta: 1 });
+
+    // Carrier 2 of 3: the just closed round's own tally is still withheld.
     expect(state).to.not.have.property('finalVote');
-    expect(state).to.not.have.property('rounds');
+
+    // Carrier 3 of 3: the live tally is emptied, not deleted, so the vote
+    // shape the client renders survives.
+    expect(state.vote).to.have.property('pair');
+    expect(state.vote.tally).to.deep.equal({});
   });
 
   it('3. reveal window delivers finalVote and rounds to the live results view (no regression)', async () => {
@@ -278,15 +289,52 @@ describe('AC-9 regression — frozen tally hiding across every broadcast surface
     expect(serialized.vote).to.deep.equal({ pair: ['A', 'B'], tally: {} });
   });
 
-  it('6b. serializeSessionState keeps the vote shape but empties the tally during TIE_PENDING (unit contract)', () => {
+  it('6b. serializeSessionState withholds all three carriers during TIE_PENDING (unit contract)', () => {
     const serialized = serializeSessionState({
       id: 's_unit_tie',
       status: 'open',
       roundLifecycle: 'TIE_PENDING',
+      rounds: [{ roundIndex: 1, tally: { A: 2, B: 1 } }],
+      finalVote: { pair: ['A', 'B'], tally: { A: 1, B: 1 }, closedAt: Date.now() },
       vote: { pair: ['A', 'B'], tally: { A: 1, B: 1 } }
     });
 
+    // A tie awaiting an admin decision is not yet a settled outcome (AC-3), so
+    // even the already closed rounds stay back until the window resolves.
+    expect(serialized).to.not.have.property('rounds');
+    expect(serialized).to.not.have.property('finalVote');
     expect(serialized.vote).to.deep.equal({ pair: ['A', 'B'], tally: {} });
+  });
+
+  it('6c. serializeSessionState releases rounds but keeps the tally withheld at ROUND_CLOSED (unit contract)', () => {
+    const serialized = serializeSessionState({
+      id: 's_unit_closed',
+      status: 'open',
+      roundLifecycle: 'ROUND_CLOSED',
+      rounds: [{ roundIndex: 1, tally: { A: 2 } }],
+      finalVote: { pair: ['A', 'B'], tally: { A: 2, B: 1 }, closedAt: Date.now() },
+      vote: { pair: ['A', 'B'], tally: { A: 2, B: 1 } }
+    });
+
+    expect(serialized.rounds).to.have.lengthOf(1);
+    expect(serialized).to.not.have.property('finalVote');
+    expect(serialized.vote).to.deep.equal({ pair: ['A', 'B'], tally: {} });
+  });
+
+  it('6d. a recovered pending session still withholds its history during a TIE_PENDING window (unit contract)', () => {
+    // Guards the recovered branch against swallowing TIE_PENDING. Recovery
+    // resets a dead session to 'pending' with no live round, which would
+    // otherwise look exactly like the recovered history case.
+    const serialized = serializeSessionState({
+      id: 's_recovered_tie',
+      status: 'pending',
+      roundLifecycle: 'TIE_PENDING',
+      rounds: [{ roundIndex: 1, tally: { A: 2 } }],
+      finalVote: { pair: ['A', 'B'], tally: { A: 1, B: 1 }, closedAt: Date.now() }
+    });
+
+    expect(serialized).to.not.have.property('rounds');
+    expect(serialized).to.not.have.property('finalVote');
   });
 
   it('7. serializeSessionState retains finalVote and rounds during RESULTS_REVEALED (unit contract)', () => {
@@ -313,5 +361,86 @@ describe('AC-9 regression — frozen tally hiding across every broadcast surface
 
     expect(serialized).to.have.property('finalVote');
     expect(serialized).to.have.property('rounds');
+  });
+
+  // The recovered case. `recoverSessionsFromDb` resets a session that was open
+  // when the process died back to 'pending', because the live round is gone.
+  // Every snapshot in `rounds[]` was already broadcast to everyone at the
+  // moment its round closed, so withholding it after a crash leaks nothing and
+  // only makes the socket and the REST read contradict the results page, which
+  // renders the same persisted history.
+  it('9. serializeSessionState releases settled rounds for a session recovered mid tournament, but not finalVote (unit contract)', () => {
+    const serialized = serializeSessionState({
+      id: 's_recovered',
+      status: 'pending',
+      rounds: [
+        { roundIndex: 1, tally: { Alpha: 2, Beta: 1 } },
+        { roundIndex: 2, tally: { Alpha: 1, Gamma: 1 } }
+      ],
+      finalVote: { pair: ['Alpha', 'Gamma'], tally: { Alpha: 1, Gamma: 1 }, closedAt: Date.now() }
+    });
+
+    expect(serialized).to.have.property('rounds');
+    expect(serialized.rounds).to.have.lengthOf(2);
+    expect(serialized.rounds[0].tally).to.deep.equal({ Alpha: 2, Beta: 1 });
+    expect(serialized).to.not.have.property('finalVote');
+  });
+
+  it('10. serializeSessionState still withholds a recovered session history while a round is live (unit contract)', () => {
+    const serialized = serializeSessionState({
+      id: 's_recovered_live',
+      status: 'pending',
+      roundLifecycle: 'VOTING',
+      rounds: [{ roundIndex: 1, tally: { A: 2 } }],
+      vote: { pair: ['A', 'B'], tally: { A: 1 } }
+    });
+
+    expect(serialized).to.not.have.property('rounds');
+    expect(serialized.vote).to.deep.equal({ pair: ['A', 'B'], tally: {} });
+  });
+
+  it('11. a pending session with no closed round is unchanged and carries no rounds (unit contract)', () => {
+    const serialized = serializeSessionState({
+      id: 's_pending_empty',
+      status: 'pending'
+    });
+
+    expect(serialized).to.not.have.property('rounds');
+    expect(serialized).to.not.have.property('finalVote');
+  });
+
+  it('12. GET /api/sessions/:id/rounds serves the settled history of a session recovered mid tournament', async () => {
+    setupSession('sess_ac9_recovered_live');
+    // Model recovery: a session that died mid tournament comes back 'pending'
+    // with its already closed rounds still in the list.
+    const pendingId = 'sess_ac9_recovered_pending';
+    store.dispatch({
+      type: 'CREATE_SESSION',
+      sessionId: pendingId,
+      title: 'Recovered Mid Tournament',
+      entries: ['Alpha', 'Beta', 'Gamma'],
+      timerDuration: 30
+    });
+    store.dispatch({
+      type: 'APPEND_ROUND_RESULT',
+      sessionId: pendingId,
+      roundSnapshot: {
+        roundIndex: 1,
+        kind: 'pairwise',
+        candidates: ['Alpha', 'Beta'],
+        tally: { Alpha: 2, Beta: 1 },
+        totalVotes: 3,
+        closedAt: new Date().toISOString(),
+        resolution: 'majority_win',
+        advanced: ['Alpha']
+      }
+    });
+
+    const res = await fetch(`http://localhost:${port}/api/sessions/${pendingId}/rounds`);
+    const body = await res.json();
+
+    expect(res.status).to.equal(200);
+    expect(body.rounds).to.have.lengthOf(1);
+    expect(body.rounds[0].tally).to.deep.equal({ Alpha: 2, Beta: 1 });
   });
 });

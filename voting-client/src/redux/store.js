@@ -33,7 +33,8 @@ export const REMOTE_ACTION_TYPES = new Set([
   'APPROVE_PARTICIPANT',
   'REJECT_PARTICIPANT',
   'REMOVE_PARTICIPANT',
-  'SET_WHO_CAN_JOIN'
+  'SET_WHO_CAN_JOIN',
+  'SET_PUBLISH_RESULTS'
 ]);
 
 /**
@@ -68,6 +69,12 @@ export const LOCAL_ACTION_TYPES = new Set([
   'SET_TIE_PENDING',
   'tie_pending',
   'sessions/setTiePendingAction',
+  'SET_TURNOUT',
+  'session_turnout',
+  'sessions/setTurnout',
+  'SET_ADMIN_SESSION_EXPIRED',
+  'sessions/setAdminSessionExpired',
+  'SET_PUBLISH_RESULTS_LOCAL',
   'voterAuth/setVoterAuth',
   'voterAuth/clearVoterAuth',
   'voterAuth/setVoterLoading',
@@ -92,12 +99,34 @@ export function isRemoteAction(action) {
   }
 
   return action.meta?.remote === true || REMOTE_ACTION_TYPES.has(action.type);
+}/**
+ * Strips the local acknowledgement callback from an action before it goes on
+ * the wire. A function is not serialisable, so leaving it in `meta` would be
+ * dead weight in the payload and would trip a serialisability inspection; the
+ * server has no use for it. The ack travels as the Socket.io emit callback
+ * instead.
+ *
+ * @param {object} action
+ * @returns {object} The action without `meta.onAck`.
+ */
+function withoutAck(action) {
+  if (!action || !action.meta || typeof action.meta.onAck !== 'function') {
+    return action;
+  }
+  const restMeta = { ...action.meta };
+  delete restMeta.onAck;
+  return { ...action, meta: restMeta };
 }
 
 /**
  * Remote Action Middleware: intercepts client actions and emits them via socket.emit('action', action).
  * Automatically enriches VOTE actions with session voterToken and admin lifecycle actions with admin JWT.
- * 
+ *
+ * An action may carry `meta.onAck`, a callback receiving the server's answer.
+ * When present it is attached as the Socket.io acknowledgement callback and
+ * removed from the payload, so the caller can wait for the authoritative
+ * result instead of assuming one (spec 0008 AC-3).
+ *
  * @param {object} [socketInstance] - Socket.io client instance
  */
 export const createRemoteActionMiddleware = (socketInstance) => (storeApi) => (next) => (action) => {
@@ -127,7 +156,8 @@ export const createRemoteActionMiddleware = (socketInstance) => (storeApi) => (n
       action.type === 'APPROVE_PARTICIPANT' ||
       action.type === 'REJECT_PARTICIPANT' ||
       action.type === 'REMOVE_PARTICIPANT' ||
-      action.type === 'SET_WHO_CAN_JOIN'
+      action.type === 'SET_WHO_CAN_JOIN' ||
+      action.type === 'SET_PUBLISH_RESULTS'
     ) {
       const adminToken = action.token || action.meta?.token || getAdminToken();
       if (adminToken && !action.token) {
@@ -140,7 +170,12 @@ export const createRemoteActionMiddleware = (socketInstance) => (storeApi) => (n
     }
 
     if (socketInstance && typeof socketInstance.emit === 'function') {
-      socketInstance.emit('action', enrichedAction);
+      const ack = typeof action.meta?.onAck === 'function' ? action.meta.onAck : null;
+      if (ack) {
+        socketInstance.emit('action', withoutAck(enrichedAction), ack);
+      } else {
+        socketInstance.emit('action', enrichedAction);
+      }
     }
   }
   return next(action);

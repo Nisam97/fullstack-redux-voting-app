@@ -207,15 +207,21 @@ describe('Round History and Full Results Backend Specs', function () {
       expect(serialized.rounds).to.be.undefined;
     });
 
-    it('retains finalVote and strips rounds during ROUND_CLOSED', () => {
+    it('releases rounds but still withholds finalVote during ROUND_CLOSED', () => {
       const serialized = serializeSessionState({
         ...baseSession,
-        roundLifecycle: 'ROUND_CLOSED'
+        roundLifecycle: 'ROUND_CLOSED',
+        finalVote: { pair: ['A', 'B'], tally: { A: 2, B: 1 } },
+        vote: { pair: ['A', 'B'], tally: { A: 2, B: 1 } }
       });
-      // AC-9: ROUND_CLOSED is not the reveal window, so the frozen rounds list
-      // stays hidden until RESULTS_REVEALED. finalVote is retained so the
-      // server side reveal flow can still read the frozen pair if needed.
-      expect(serialized.rounds).to.be.undefined;
+      // AC-3 (amended): the settled history of a closed round is public the
+      // moment the round closes, because closeRoundOnce froze that tally
+      // before it set the lifecycle. The round's own tally is not: it waits for
+      // the reveal, on both carriers, and the live tally is emptied rather than
+      // deleted so the client keeps the vote shape.
+      expect(serialized.rounds).to.have.lengthOf(1);
+      expect(serialized.finalVote).to.be.undefined;
+      expect(serialized.vote).to.deep.equal({ pair: ['A', 'B'], tally: {} });
     });
 
     it('strips finalVote during active VOTING', () => {
@@ -375,6 +381,17 @@ describe('Round History and Full Results Backend Specs', function () {
         advanced: ['Candidate 1']
       };
 
+      // The Session row exists but is absent from the Redux store, so this
+      // exercises the DB branch of the rounds read. It has to exist: the
+      // visibility gate fails closed when neither the store nor the database
+      // can produce the session (spec 0008 AC-2), so a Result with no Session
+      // behind it is no longer readable anonymously.
+      await repository.saveSession({
+        sessionId: 'sess_archived',
+        title: 'Archived Session',
+        entries: ['Candidate 1', 'Candidate 2'],
+        status: 'archived'
+      });
       await repository.pushRoundToResult('sess_archived', roundSnapshot, { title: 'Archived Session' });
 
       const res = await requestHttp(`http://localhost:${port}/api/sessions/sess_archived/rounds`);
@@ -465,6 +482,84 @@ describe('Round History and Full Results Backend Specs', function () {
       expect(rounds.getIn([0, 'roundIndex'])).to.equal(0);
       expect(rounds.getIn([0, 'candidates']).toJS()).to.deep.equal(['Candidate X', 'Candidate Y']);
       expect(rounds.getIn([0, 'resolution'])).to.equal('majority_win');
+    });
+
+    it('covers AC-3, AC-8: a completed session recovers as completed so its rounds survive the broadcast guard', async () => {
+      // The round append is only half of recovery. CREATE_SESSION always lands a
+      // session as 'pending', and the shared guard releases `rounds` only for a
+      // concluded session or an active reveal, so a session MongoDB had already
+      // recorded as completed came back with its rounds stripped from the
+      // broadcast and from the rounds endpoint. That is the state a client reads
+      // after every restart, so the round history has to be asserted through the
+      // serializer, not only in the store.
+      const round0 = {
+        roundIndex: 0,
+        kind: 'pairwise',
+        candidates: ['Candidate X', 'Candidate Y'],
+        tally: { 'Candidate X': 3, 'Candidate Y': 1 },
+        totalVotes: 4,
+        closedAt: new Date(),
+        resolution: 'majority_win',
+        advanced: null
+      };
+
+      await repository.saveSession({
+        sessionId: 'sess_recover_completed',
+        title: 'Finished Session',
+        entries: ['Candidate X', 'Candidate Y'],
+        status: 'completed',
+        winner: 'Candidate X'
+      });
+      await repository.pushRoundToResult('sess_recover_completed', round0, { title: 'Finished Session' });
+
+      const freshStore = makeStore();
+      await recoverSessionsFromDb(freshStore);
+
+      const recoveredSession = freshStore.getState().getIn(['sessions', 'sess_recover_completed']);
+      expect(recoveredSession).to.not.be.undefined;
+      expect(recoveredSession.get('status')).to.equal('completed');
+      expect(recoveredSession.get('winner')).to.equal('Candidate X');
+
+      const payload = serializeSessionState(recoveredSession);
+      expect(payload.status).to.equal('completed');
+      expect(payload.winner).to.equal('Candidate X');
+      expect(payload.rounds).to.have.lengthOf(1);
+      expect(payload.rounds[0].resolution).to.equal('majority_win');
+    });
+
+    it('covers AC-8: a session that concluded with no winner recovers as completed with its rounds', async () => {
+      // The no_result path. The winner is null on purpose, so this also proves the
+      // restore does not depend on a winner being present.
+      const round0 = {
+        roundIndex: 0,
+        kind: 'single_ballot',
+        candidates: ['Ash', 'Bee', 'Cedar'],
+        tally: {},
+        totalVotes: 0,
+        closedAt: new Date(),
+        resolution: 'no_result',
+        advanced: null
+      };
+
+      await repository.saveSession({
+        sessionId: 'sess_recover_no_result',
+        title: 'No Result Session',
+        entries: ['Ash', 'Bee', 'Cedar'],
+        status: 'completed',
+        winner: null
+      });
+      await repository.pushRoundToResult('sess_recover_no_result', round0, { title: 'No Result Session' });
+
+      const freshStore = makeStore();
+      await recoverSessionsFromDb(freshStore);
+
+      const recoveredSession = freshStore.getState().getIn(['sessions', 'sess_recover_no_result']);
+      expect(recoveredSession.get('status')).to.equal('completed');
+      expect(recoveredSession.get('winner')).to.be.null;
+
+      const payload = serializeSessionState(recoveredSession);
+      expect(payload.rounds).to.have.lengthOf(1);
+      expect(payload.rounds[0].resolution).to.equal('no_result');
     });
   });
 });

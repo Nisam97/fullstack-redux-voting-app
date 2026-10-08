@@ -38,6 +38,7 @@ import {
   setAllowlist,
   approveParticipant,
   rejectParticipant,
+  removeParticipant,
   setWhoCanJoin
 } from "../redux/voteSlice";
 import { getSocket, subscribeSession, unsubscribeSession } from "../services/socket";
@@ -76,7 +77,6 @@ function Admin() {
   const [newSessionType, setNewSessionType] = useState("open");
   const [newWhoCanJoin, setNewWhoCanJoin] = useState("allowlist");
   const [newAllowlistText, setNewAllowlistText] = useState("");
-  const [newPublishResults, setNewPublishResults] = useState(true);
 
   // Manage Session Modal State
   const [managingSessionId, setManagingSessionId] = useState(null);
@@ -175,7 +175,20 @@ function Admin() {
       }
     };
 
+    // Room membership (participants:<id>) dies with the connection, and any
+    // reconnect drops it: admin login/logout forces one through
+    // applyAdminTokenToSocket, and Socket.io also reconnects on network blips.
+    // Re-subscribe on every 'connect' so the roster keeps updating instead of
+    // silently freezing until Manage is reopened. The admin identity rides the
+    // handshake auth token, so the server recognises the re-join.
+    const handleReconnect = () => {
+      socket.emit("subscribe_participants", { sessionId: managingSessionId });
+    };
+
     socket.on("session_participants", handleParticipants);
+    if (typeof socket.on === "function") {
+      socket.on("connect", handleReconnect);
+    }
 
     return () => {
       if (socket && typeof socket.emit === "function") {
@@ -183,6 +196,7 @@ function Admin() {
       }
       if (socket && typeof socket.off === "function") {
         socket.off("session_participants", handleParticipants);
+        socket.off("connect", handleReconnect);
       }
       setParticipantsData(null);
       setParticipantFeedback(null);
@@ -285,8 +299,7 @@ function Admin() {
       timerDuration: durationValidation.value,
       sessionType: newSessionType,
       type: newSessionType,
-      whoCanJoin: newSessionType === "secured" ? newWhoCanJoin : "public",
-      publishResultsPublicly: newSessionType === "secured" ? newPublishResults : true
+      whoCanJoin: newSessionType === "secured" ? newWhoCanJoin : "public"
     };
 
     // Dispatch CREATE_SESSION via socket remote action middleware
@@ -312,7 +325,6 @@ function Admin() {
       setNewSessionType("open");
       setNewWhoCanJoin("allowlist");
       setNewAllowlistText("");
-      setNewPublishResults(true);
       setShowCreateModal(false);
     }, 400);
   };
@@ -342,6 +354,21 @@ function Admin() {
   const handleRejectParticipant = (requestId) => {
     if (!managingSessionId || !requestId) return;
     dispatch(rejectParticipant(managingSessionId, requestId));
+  };
+
+  // AC-11: allowlist rows carry a Remove action. Removal is destructive and
+  // cuts a voter off, so it confirms first the way the mode switch does. The
+  // server is authoritative: it disconnects the voter in the lobby and defers
+  // the cut off to the end of the round while the session is open (AC-7).
+  const handleRemoveAllowlistEmail = (email) => {
+    if (!managingSessionId || !email) return;
+    const confirmed = window.confirm(
+      `Remove ${email} from this session? They will lose access immediately.`
+    );
+    if (!confirmed) return;
+    dispatch(removeParticipant(managingSessionId, email));
+    setParticipantFeedback(`Removed ${email}.`);
+    setTimeout(() => setParticipantFeedback(null), 3000);
   };
 
   const handleSwitchWhoCanJoin = (newMode) => {
@@ -1160,9 +1187,6 @@ function Admin() {
                     onChange={(e) => {
                       const val = e.target.value;
                       setNewSessionType(val);
-                      if (val === "secured") {
-                        setNewPublishResults(false);
-                      }
                     }}
                     disabled={isCreating}
                     data-testid="create-session-type-select"
@@ -1545,9 +1569,20 @@ function Admin() {
                           {participantsData.entries.map((entry) => (
                             <li key={entry.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.3rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
                               <span style={{ color: "#f8fafc" }}>{entry.email}</span>
-                              <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: entry.status === "joined" ? "rgba(74, 222, 128, 0.15)" : "rgba(56, 189, 248, 0.15)", color: entry.status === "joined" ? "#4ade80" : "#38bdf8" }}>
-                                {entry.status}
-                              </span>
+                              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: entry.status === "joined" ? "rgba(74, 222, 128, 0.15)" : "rgba(56, 189, 248, 0.15)", color: entry.status === "joined" ? "#4ade80" : "#38bdf8" }}>
+                                  {entry.status}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAllowlistEmail(entry.email)}
+                                  className="admin-btn admin-btn-danger"
+                                  style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+                                  data-testid={`remove-participant-${entry.email}`}
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             </li>
                           ))}
                         </ul>

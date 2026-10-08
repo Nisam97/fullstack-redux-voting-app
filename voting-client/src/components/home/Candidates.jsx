@@ -1,23 +1,25 @@
 import "./Candidates.css";
 
-const candidates = [
+// Real product modes instead of fictional named candidates with placeholder
+// avatar photos (external images break offline) or dead "View Profile" buttons.
+const modes = [
   {
     id: 1,
-    name: "Alex Johnson",
-    role: "President Candidate",
-    image: "https://i.pravatar.cc/300?img=12"
+    icon: "🗳️",
+    name: "Single Ballot",
+    role: "2–6 candidates in one vote"
   },
   {
     id: 2,
-    name: "Sophia Williams",
-    role: "Vice President",
-    image: "https://i.pravatar.cc/300?img=32"
+    icon: "🏆",
+    name: "Knockout Tournament",
+    role: "Pairwise rounds for 7+ entries"
   },
   {
     id: 3,
-    name: "David Miller",
-    role: "Secretary",
-    image: "https://i.pravatar.cc/300?img=15"
+    icon: "🛡️",
+    name: "Secured Sessions",
+    role: "Approval or allowlist entry"
   }
 ];
 
@@ -27,30 +29,26 @@ function Candidates() {
       <div className="container">
 
         <div className="section-title">
-          <h2>Featured Candidates</h2>
+          <h2>Three Ways to Run a Vote</h2>
           <p>
-            Meet the candidates participating in this election.
+            Pick the structure that fits your session — VoteSphere
+            handles the rounds, ties and results.
           </p>
         </div>
 
         <div className="candidate-grid">
 
-          {candidates.map((candidate) => (
+          {modes.map((mode) => (
 
-            <div className="candidate-card" key={candidate.id}>
+            <div className="candidate-card" key={mode.id}>
 
-              <img
-                src={candidate.image}
-                alt={candidate.name}
-              />
+              <div className="mode-icon" role="img" aria-label={mode.name}>
+                {mode.icon}
+              </div>
 
-              <h3>{candidate.name}</h3>
+              <h3>{mode.name}</h3>
 
-              <span>{candidate.role}</span>
-
-              <button>
-                View Profile
-              </button>
+              <span>{mode.role}</span>
 
             </div>
 

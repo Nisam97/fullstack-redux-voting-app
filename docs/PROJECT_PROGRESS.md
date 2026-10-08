@@ -4,7 +4,7 @@
 **Author:** Technical Writer (`agency-technical-writer`)  
 **Last Updated:** September 14, 2026  
 **Current Active Branch:** `develop1`  
-**Reference:** [ARCHITECTURE.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/ARCHITECTURE.md), [API_CONTRACT.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/API_CONTRACT.md), [CHANGELOG.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/CHANGELOG.md)
+**Reference:** [Architecture.md](../Architecture.md) (docs/ARCHITECTURE.md is retired), [API_CONTRACT.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/API_CONTRACT.md), [CHANGELOG.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/CHANGELOG.md)
 
 ---
 

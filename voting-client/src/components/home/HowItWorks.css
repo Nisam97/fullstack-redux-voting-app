@@ -16,6 +16,8 @@
 }
 
 .section-heading h2{
+    /* Same dark-background rule as .section-title in Features.css. */
+    color:#f1f5f9;
     font-size:52px;
     margin:20px 0;
     font-weight:700;
@@ -72,6 +74,8 @@
 }
 
 .step-card h3{
+    /* Dark card backgrounds in every scheme — keep headings light. */
+    color:#f1f5f9;
     margin-bottom:15px;
 }
 

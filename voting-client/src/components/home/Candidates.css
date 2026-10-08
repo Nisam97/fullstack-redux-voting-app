@@ -29,7 +29,19 @@
     object-fit:cover;
 }
 
+/* Emoji badge replacing the old placeholder <img> */
+.mode-icon{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:120px;
+    font-size:64px;
+    background:linear-gradient(135deg,rgba(37,99,235,.25),rgba(56,189,248,.15));
+}
+
 .candidate-card h3{
+    /* Dark card backgrounds in every scheme — keep headings light. */
+    color:#f1f5f9;
     margin-top:20px;
     font-size:24px;
 }

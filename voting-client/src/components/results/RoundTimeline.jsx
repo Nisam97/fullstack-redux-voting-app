@@ -13,8 +13,11 @@ import './RoundTimeline.css';
  *
  * @param {object} props
  * @param {Array<object>} props.rounds - Array of frozen round snapshots
+ * @param {string|null} [props.winner] - Tournament winner, when one was declared.
+ *   `advanced: null` only means the round was the last one, not that someone won,
+ *   so the final round notice needs to know whether a winner actually exists.
  */
-function RoundTimeline({ rounds = [] }) {
+function RoundTimeline({ rounds = [], winner = null }) {
   // Default first or last round open, or track expanded round indices
   const [expandedIndex, setExpandedIndex] = useState(rounds.length > 0 ? rounds[rounds.length - 1].roundIndex : null);
 
@@ -145,7 +148,9 @@ function RoundTimeline({ rounds = [] }) {
                   {round.advanced === null && (
                     <div className="round-championship-notice">
                       <Award size={16} aria-hidden="true" />
-                      <span>Championship Round — Winner crowned tournament champion</span>
+                      <span>{winner
+                        ? 'Championship Round — Winner crowned tournament champion'
+                        : 'Final Round — No winner declared'}</span>
                     </div>
                   )}
                 </div>

@@ -1,4 +1,22 @@
 import { SERVER_URL } from './socket.js';
+import { getAdminToken } from './auth.js';
+
+/**
+ * Builds the request headers for a result read. The `vs_voter` cookie rides
+ * along via `credentials: 'include'`; the admin Bearer header is attached when
+ * an admin token is in storage, so the admin and an approved participant can
+ * both read a gated secured result (spec 0008).
+ *
+ * @returns {Object}
+ */
+function buildResultHeaders() {
+  const headers = { 'Accept': 'application/json' };
+  const token = getAdminToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 /**
  * Fetch list of completed tournament results history.
@@ -15,9 +33,8 @@ export async function fetchSessionHistory(limit = 50) {
 
     const response = await fetch(url.toString(), {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      }
+      headers: buildResultHeaders(),
+      credentials: 'include'
     });
 
     const data = await response.json();
@@ -64,9 +81,8 @@ export async function fetchSessionResult(sessionId) {
   try {
     const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/result`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      }
+      headers: buildResultHeaders(),
+      credentials: 'include'
     });
 
     const data = await response.json();
@@ -110,9 +126,8 @@ export async function fetchSessionRounds(sessionId) {
   try {
     const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/rounds`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      }
+      headers: buildResultHeaders(),
+      credentials: 'include'
     });
 
     const data = await response.json();

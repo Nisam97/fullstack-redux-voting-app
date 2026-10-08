@@ -336,6 +336,15 @@ async function saveResultInner(resultData) {
     if (resultData.entries && (!existing.entries || existing.entries.length === 0)) {
       setFields.entries = resultData.entries;
     }
+    // Visibility fields (spec 0008) are authoritative from the session and are
+    // (re)written on completion, so a partial row created by a round push and a
+    // fully recomputed result agree.
+    if (resultData.type) {
+      setFields.type = resultData.type;
+    }
+    if (resultData.publishResultsPublicly !== undefined) {
+      setFields.publishResultsPublicly = Boolean(resultData.publishResultsPublicly);
+    }
     await Result.updateOne({ _id: existing._id }, { $set: setFields });
     return await Result.findOne({ _id: existing._id });
   }
@@ -345,20 +354,149 @@ async function saveResultInner(resultData) {
     entries: resultData.entries,
     winner: resultData.winner,
     completedAt: resultData.completedAt || new Date(),
+    type: resultData.type || 'public',
+    publishResultsPublicly: resultData.publishResultsPublicly !== undefined
+      ? Boolean(resultData.publishResultsPublicly)
+      : false,
     rounds: resultData.rounds || []
   });
 }
 
 /**
- * Retrieve completed results sorted by completedAt desc.
- * Filters only sessions with an official winner.
+ * Count Result rows that still carry no `type`, so a failed backfill can report
+ * how much it left behind instead of only saying that it failed (spec 0008 AC-9).
+ *
+ * @returns {Promise<number>}
+ */
+export async function countResultsWithoutType() {
+  return await Result.countDocuments({ type: { $exists: false } });
+}
+
+/**
+ * Retrieve completed results sorted by completedAt desc (spec 0008 AC-5).
+ *
+ * A completed result is listed when it is public, or its session is a secured
+ * one the admin has published. `completedAt: { $ne: null }` excludes partial
+ * rows a round push created while the session is still running.
+ *
+ * A row with no `type` is deliberately NOT listed. The archive is public and
+ * anonymous, so a row whose securedness cannot be established must not appear
+ * there: reading a missing `type` as public published the winner of a secured
+ * session to anyone holding its id, the same leak the per-session reads close
+ * by failing closed. Legacy rows reach the archive the moment the backfill
+ * gives them a type (`backfillResultTypes`, run at startup), which is the only
+ * path that should put one there. Pinned by
+ * `test/visibility_and_privacy_spec.js` section 16.
+ *
+ * Membership keys off completion, not off a winner. A session that concluded
+ * with no official winner (`no_result`, `winner: null` with a fresh
+ * `completedAt`) is still a completed public result, so AC-5 lists it like any
+ * other; the history row renders a neutral label for it instead of an empty
+ * champion banner. Asserted in
+ * `test/visibility_and_privacy_spec.js` ("lists a completed public result with
+ * no official winner"), so a future tightening of this filter fails a test
+ * rather than slipping through.
+ *
  * @param {number} [limit=50]
  * @returns {Promise<Array>}
  */
 export async function getCompletedResults(limit = 50) {
   const parsedLimit = parseInt(limit, 10);
   const maxResults = isNaN(parsedLimit) || parsedLimit <= 0 ? 50 : Math.min(parsedLimit, 100);
-  return await Result.find({ winner: { $ne: null } }, { rounds: 0 }).sort({ completedAt: -1 }).limit(maxResults).lean();
+  return await Result.find(
+    {
+      completedAt: { $ne: null },
+      $or: [
+        { type: 'public' },
+        { publishResultsPublicly: true }
+      ]
+    },
+    { rounds: 0 }
+  ).sort({ completedAt: -1 }).limit(maxResults).lean();
+}
+
+/**
+ * Set the admin publish switch on both the Session and its Result in one step
+ * (spec 0008 AC-3), so the two rows never drift.
+ *
+ * Every read resolves against the `Result` row (the history filter, the result
+ * read and the rounds read all key off it), so it is written first and the
+ * `Session` mirror second. If the mirror write fails, the `Result` write is
+ * undone, so a partial failure leaves both rows on the old value rather than
+ * one of them flipped. A transaction would say the same thing, but this
+ * deployment runs a standalone MongoDB, where multi document transactions are
+ * unavailable; the compensating write is the honest equivalent here.
+ *
+ * @param {string} sessionId
+ * @param {boolean} publishResultsPublicly
+ * @returns {Promise<void>}
+ */
+export async function setPublishResultsPublicly(sessionId, publishResultsPublicly) {
+  if (!sessionId) {
+    throw new Error('sessionId is required to set publish state');
+  }
+  const value = Boolean(publishResultsPublicly);
+
+  const previousResult = await Result.findOne({ sessionId }).select('publishResultsPublicly').lean();
+  const hadPreviousResult = previousResult !== null;
+  const previousValue = hadPreviousResult ? previousResult.publishResultsPublicly === true : false;
+
+  await Result.updateOne({ sessionId }, { $set: { publishResultsPublicly: value } });
+
+  try {
+    await Session.updateOne({ sessionId }, { $set: { publishResultsPublicly: value } });
+  } catch (sessionErr) {
+    // Roll the Result row back to what it held before this call, so the two
+    // copies cannot end up disagreeing across a restart. With no Result row
+    // there was nothing to write, so there is nothing to undo either.
+    if (hadPreviousResult) {
+      await Result.updateOne({ sessionId }, { $set: { publishResultsPublicly: previousValue } });
+    }
+    console.error(
+      `[Visibility] Publish mirror write failed for "${sessionId}": ${sessionErr.message}. ` +
+      'The Result row was rolled back, so the publish flag did not change.'
+    );
+    throw sessionErr;
+  }
+}
+
+/**
+ * Backfill `Result.type` from the matching `Session.type` for rows created
+ * before the field existed (spec 0008 AC-9). A missing session (or session
+ * type) is treated as 'public', and the window is small because secured
+ * sessions are recent. Idempotent: only rows with no `type` are touched.
+ *
+ * @returns {Promise<{ scanned: number, backfilled: number, orphaned: number }>}
+ */
+export async function backfillResultTypes() {
+  const missing = await Result.find({ type: { $exists: false } }).lean();
+  let backfilled = 0;
+  let orphaned = 0;
+  for (const row of missing) {
+    let resultType = 'public';
+    try {
+      const sessionDoc = await Session.findOne({ sessionId: row.sessionId }).lean();
+      if (sessionDoc && sessionDoc.type) {
+        resultType = sessionDoc.type;
+      } else {
+        orphaned += 1;
+      }
+    } catch (err) {
+      orphaned += 1;
+    }
+    const publishExists = row.publishResultsPublicly !== undefined;
+    const update = { $set: { type: resultType } };
+    if (!publishExists) {
+      // A backfilled secured row stays unpublished unless it was already public.
+      update.$set.publishResultsPublicly = resultType === 'public';
+    }
+    await Result.updateOne({ _id: row._id }, update);
+    backfilled += 1;
+  }
+  if (orphaned > 0) {
+    console.warn(`[Backfill] ${orphaned} Result row(s) had no matching Session and were treated as public`);
+  }
+  return { scanned: missing.length, backfilled, orphaned };
 }
 
 /**

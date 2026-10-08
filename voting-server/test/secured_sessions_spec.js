@@ -9,7 +9,7 @@ import SessionJoinRequest from '../src/db/models/SessionJoinRequest.js';
 import VoteParticipation from '../src/db/models/VoteParticipation.js';
 import { generateAdminToken } from '../src/auth/admin.js';
 import { generateVoterToken, buildVoterCookieHeader } from '../src/auth/voterCookie.js';
-import { clearVoters } from '../src/auth/voter.js';
+import { clearVoters, validateVoterToken } from '../src/auth/voter.js';
 import startServer from '../src/server.js';
 import makeStore from '../src/store.js';
 
@@ -589,23 +589,45 @@ describe('Feature 8: Secured Sessions, Access Control & Vote Participation (Spec
       socket.emit('action', {
         type: 'REMOVE_PARTICIPANT',
         sessionId: 'sec_remove_test',
-        voterToken,
+        email: 'removable@test.com',
         token: adminToken
       });
       await new Promise((r) => setTimeout(r, 200));
 
-      // Attempt to vote
-      const voteErrorPromise = waitForEvent(socket, 'action_error');
+      // The session is open here, so AC-7 defers the removal to the end of
+      // the round: the voter may finish the current vote. Revocation must NOT
+      // happen yet, otherwise a legitimate participant is cut off mid ballot.
+      expect(validateVoterToken(voterToken, 'sec_remove_test').valid).to.equal(true);
+
+      // Concluding the round is what applies the deferred revocation.
       socket.emit('action', {
+        type: 'NEXT',
+        sessionId: 'sec_remove_test',
+        token: adminToken
+      });
+      await new Promise((r) => setTimeout(r, 400));
+
+      expect(validateVoterToken(voterToken, 'sec_remove_test').valid).to.equal(false);
+
+      // Attempt to vote from the voter's own cookie carrying socket, which is
+      // the real browser path, so the server derives the token itself.
+      const voterSocket = createSocketClient({ extraHeaders: { Cookie: voterCookie } });
+      await waitForEvent(voterSocket, 'connect');
+      voterSocket.on('disconnect', () => {});
+
+      const voteErrorPromise = waitForEvent(voterSocket, 'action_error');
+      voterSocket.emit('action', {
         type: 'VOTE',
         sessionId: 'sec_remove_test',
-        entry: 'Alpha',
-        voterToken
+        entry: 'Alpha'
       });
 
       const err = await voteErrorPromise;
       expect(err.action).to.equal('VOTE');
-      expect(err.error).to.equal('FORBIDDEN_VOTER_TOKEN');
+      // Refused because the voter was removed, not because the token looked
+      // forged. A forged token is a different failure and is covered elsewhere.
+      expect(err.error).to.not.equal('FORBIDDEN_VOTER_TOKEN');
+      expect(['INVALID_TOKEN', 'NOT_ELIGIBLE']).to.include(err.error);
     });
   });
 

@@ -1,7 +1,9 @@
-import { SERVER_URL, socket } from './socket.js';
+import { SERVER_URL, socket, ADMIN_TOKEN_KEY, ADMIN_USER_KEY, applyAdminTokenToSocket } from './socket.js';
 
-export const ADMIN_TOKEN_KEY = 'votesphere_admin_jwt';
-export const ADMIN_USER_KEY = 'votesphere_admin_user';
+// Re-exported so existing importers of auth.js keep working. The keys live in
+// socket.js now, because the socket handshake reads them at module load and
+// dropping a dead credential happens there too.
+export { ADMIN_TOKEN_KEY, ADMIN_USER_KEY };
 
 /**
  * Returns the currently stored admin JWT token, if any.
@@ -91,10 +93,10 @@ export async function loginAdmin({ username, email, password }) {
       }
     }
 
-    // Also synchronize socket auth if socket is connected
-    if (socket) {
-      socket.auth = { ...socket.auth, token: data.token };
-    }
+    // The server decides admin vs voter from the socket handshake, so the new
+    // token only takes effect once the socket reconnects with it. Without this
+    // the admin panel keeps showing the voter filtered session list.
+    applyAdminTokenToSocket(data.token);
 
     return {
       success: true,
@@ -118,9 +120,9 @@ export function logoutAdmin() {
     window.localStorage.removeItem(ADMIN_TOKEN_KEY);
     window.localStorage.removeItem(ADMIN_USER_KEY);
   }
-  if (socket && socket.auth) {
-    delete socket.auth.token;
-  }
+  // Drop the admin identity from the handshake and reconnect, otherwise the
+  // socket would keep its previous admin privileges until the page reloads.
+  applyAdminTokenToSocket(null);
 }
 
 // --- Session-Scoped Voter Identity ---

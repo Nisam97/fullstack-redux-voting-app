@@ -412,12 +412,15 @@ describe('Stage C: Results Persistence & History API', function () {
       expect(resObj).to.not.have.property('voterTokens');
       expect(resObj).to.not.have.property('socket');
 
-      // Verify exact shape
+      // Verify exact shape. Spec 0008 adds the visibility fields (`type`,
+      // `publishResultsPublicly`) so the admin publish toggle can render state.
       expect(Object.keys(resObj).sort()).to.deep.equal([
         'completedAt',
         'entries',
+        'publishResultsPublicly',
         'sessionId',
         'title',
+        'type',
         'winner'
       ]);
     });

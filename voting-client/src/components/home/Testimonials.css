@@ -33,6 +33,8 @@
 }
 
 .testimonial-card h3{
+    /* Dark card backgrounds in every scheme — keep headings light. */
+    color:#f1f5f9;
     margin-top:25px;
 }
 

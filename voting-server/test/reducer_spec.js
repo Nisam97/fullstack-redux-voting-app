@@ -41,6 +41,100 @@ describe('reducer', () => {
     expect(nextState.getIn(['sessions', 'sess_1', 'entries'])).to.equal(fromJS([]));
   });
 
+  // Spec 0008 AC-3: the admin publish switch on the live store session.
+  describe('SET_PUBLISH_RESULTS (AC-3)', () => {
+    const storeWithSession = (overrides = {}) => fromJS({
+      sessions: {
+        sess_secured: {
+          id: 'sess_secured',
+          title: 'Board picks',
+          status: 'completed',
+          type: 'secured',
+          entries: [],
+          ...overrides
+        }
+      }
+    });
+
+    it('writes publishResultsPublicly true onto the live session', () => {
+      const nextState = reducer(
+        storeWithSession(),
+        { type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_secured', publishResultsPublicly: true }
+      );
+
+      expect(nextState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.equal(true);
+    });
+
+    it('writes it back to false, so unpublishing is the same action', () => {
+      const nextState = reducer(
+        storeWithSession({ publishResultsPublicly: true }),
+        { type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_secured', publishResultsPublicly: false }
+      );
+
+      expect(nextState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.equal(false);
+    });
+
+    it('accepts an archived session, because archiving must not strand a result', () => {
+      const nextState = reducer(
+        storeWithSession({ status: 'archived' }),
+        { type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_secured', publishResultsPublicly: true }
+      );
+
+      expect(nextState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.equal(true);
+    });
+
+    it('accepts electionId as the session id alias', () => {
+      const nextState = reducer(
+        storeWithSession(),
+        { type: 'SET_PUBLISH_RESULTS', electionId: 'sess_secured', publishResultsPublicly: true }
+      );
+
+      expect(nextState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.equal(true);
+    });
+
+    it('leaves the state untouched when the flag is not a boolean', () => {
+      const initialState = storeWithSession();
+
+      for (const flag of ['true', 1, 0, null, undefined]) {
+        const nextState = reducer(
+          initialState,
+          { type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_secured', publishResultsPublicly: flag }
+        );
+        expect(nextState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.be.undefined;
+      }
+    });
+
+    it('leaves the state untouched when the session id is missing or not a string', () => {
+      const initialState = storeWithSession();
+
+      const noId = reducer(initialState, { type: 'SET_PUBLISH_RESULTS', publishResultsPublicly: true });
+      const numericId = reducer(initialState, {
+        type: 'SET_PUBLISH_RESULTS', sessionId: 42, publishResultsPublicly: true
+      });
+
+      expect(noId).to.equal(initialState);
+      expect(numericId).to.equal(initialState);
+    });
+
+    it('leaves the state untouched for a session that is not in the store', () => {
+      const initialState = storeWithSession();
+
+      const nextState = reducer(initialState, {
+        type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_missing', publishResultsPublicly: true
+      });
+
+      expect(nextState).to.equal(initialState);
+    });
+
+    it('never mutates the state it was given', () => {
+      const initialState = storeWithSession();
+
+      reducer(initialState, { type: 'SET_PUBLISH_RESULTS', sessionId: 'sess_secured', publishResultsPublicly: true });
+
+      expect(initialState.getIn(['sessions', 'sess_secured', 'publishResultsPublicly'])).to.be.undefined;
+    });
+  });
+
   it('handles VOTE', () => {
     const initialState = fromJS({
       sessions: {

@@ -222,13 +222,29 @@ export async function persistCompletedResult(sessionId, session) {
     entries = winner ? [winner] : [];
   }
 
+  // Visibility fields (spec 0008 AC-9): take the session type and publish
+  // switch from the persisted Session first, then the live store session.
+  const sessionType = (sessionDoc && sessionDoc.type)
+    || (session && typeof session.get === 'function' ? session.get('type') : (session && session.type))
+    || 'public';
+  const sessionPublish = (sessionDoc && sessionDoc.publishResultsPublicly !== undefined)
+    ? sessionDoc.publishResultsPublicly
+    : (session && typeof session.get === 'function'
+        ? session.get('publishResultsPublicly')
+        : (session && session.publishResultsPublicly));
+  const publishResultsPublicly = sessionPublish !== undefined
+    ? Boolean(sessionPublish)
+    : sessionType !== 'secured';
+
   try {
     const savedResult = await repository.saveResult({
       sessionId,
       title,
       entries,
       winner,
-      completedAt: (sessionDoc && sessionDoc.completedAt) || new Date()
+      completedAt: (sessionDoc && sessionDoc.completedAt) || new Date(),
+      type: sessionType,
+      publishResultsPublicly
     });
     console.log(`[Persistence] Persisted completed result for session "${sessionId}" (Winner: "${winner}")`);
     return savedResult;
@@ -277,7 +293,9 @@ function persistJoinCodeChange(sessionId, joinCode) {
  * Recovery semantics:
  * - 'pending' sessions: restored as-is (CREATE_SESSION only)
  * - 'open' sessions: reset to 'pending' (mid-round state is lost; CREATE_SESSION only)
- * - 'completed' sessions: restored with winner (CREATE_SESSION only, status stays in store)
+ * - 'completed' sessions: restored with their status and winner, so a finished
+ *   session still reads as finished and the round history guard still releases
+ *   its rounds to the broadcast and the rounds endpoint
  * - 'archived' sessions: NOT loaded into Redux store (queryable only via history API)
  *
  * @param {Object} store - Redux store instance
@@ -362,11 +380,21 @@ export async function recoverSessionsFromDb(store) {
         }
 
         // For completed sessions, we need to reflect their completed status.
-        // The session starts as 'pending' from CREATE_SESSION — we don't START
-        // it because that would advance the tournament. The session's metadata
-        // (title, entries, winner) is preserved in MongoDB for history queries.
-        // The Redux store only needs CREATE_SESSION to register the session
-        // in the registry for visibility.
+        // CREATE_SESSION always lands as 'pending', and a 'pending' session is
+        // stripped of its round history by the shared guard, so a finished
+        // session came back looking unfinished after every restart: no winner in
+        // the lobby, no rounds in the broadcast or the rounds endpoint. We don't
+        // START it, because that would advance the tournament; restoring the
+        // recorded outcome is the whole of it. An interrupted 'open' session was
+        // reset to 'pending' above and is deliberately left there.
+        if (sessionData.status === 'completed') {
+          store.dispatch({
+            type: 'RESTORE_SESSION_OUTCOME',
+            sessionId: sessionData.sessionId,
+            status: 'completed',
+            winner: sessionData.winner || null
+          });
+        }
 
         recovered++;
         console.log(`[Persistence] Recovered session "${sessionData.sessionId}" (status: ${sessionData.status})`);

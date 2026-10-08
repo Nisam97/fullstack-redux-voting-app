@@ -162,5 +162,60 @@ describe('MongoDB Models', () => {
       const saved = await result.save();
       expect(saved.title).to.equal('');
     });
+
+    // Spec 0008 AC-9: the visibility fields the history query filters on.
+    it('defaults type to public and the publish switch to off', async () => {
+      const result = new Result({
+        sessionId: 'sess_res_defaults',
+        entries: ['A', 'B'],
+        winner: 'B'
+      });
+      const saved = await result.save();
+
+      expect(saved.type).to.equal('public');
+      expect(saved.publishResultsPublicly).to.equal(false);
+    });
+
+    it('stores an explicit secured type with the publish switch on', async () => {
+      const result = new Result({
+        sessionId: 'sess_res_secured',
+        entries: ['A', 'B'],
+        winner: 'A',
+        type: 'secured',
+        publishResultsPublicly: true
+      });
+      const saved = await result.save();
+
+      expect(saved.type).to.equal('secured');
+      expect(saved.publishResultsPublicly).to.equal(true);
+    });
+
+    it('rejects a type outside public and secured', async () => {
+      const result = new Result({
+        sessionId: 'sess_res_bad_type',
+        entries: ['A', 'B'],
+        winner: 'A',
+        type: 'secret'
+      });
+
+      let err = null;
+      try {
+        await result.save();
+      } catch (e) {
+        err = e;
+      }
+      expect(err).to.exist;
+      expect(err.errors.type).to.exist;
+    });
+
+    it('carries the index the visibility history query filters on', () => {
+      // The archive reads type and publishResultsPublicly together with
+      // completedAt, so that compound index is the one the query leans on.
+      const indexes = Result.schema.indexes();
+      const keys = indexes.map(([fields]) => JSON.stringify(fields));
+
+      expect(keys).to.include(JSON.stringify({ type: 1, publishResultsPublicly: 1, completedAt: -1 }));
+      expect(keys).to.include(JSON.stringify({ completedAt: -1 }));
+    });
   });
 });

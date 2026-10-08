@@ -9,6 +9,9 @@
 }
 
 .section-title h2{
+    /* The landing sections keep dark navy backgrounds in every scheme, so
+       headings must not inherit index.css's light-scheme near-black. */
+    color:#f1f5f9;
     font-size:48px;
     margin-bottom:15px;
 }
@@ -54,6 +57,8 @@
 }
 
 .feature-card h3{
+    /* Dark card backgrounds in every scheme — keep headings light. */
+    color:#f1f5f9;
     margin-bottom:15px;
     font-size:24px;
 }

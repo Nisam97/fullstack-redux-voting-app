@@ -53,32 +53,44 @@ function VoteCard({
       <div className="vote-card-content">
         <h2 className="vote-card-title">{entry}</h2>
 
+        {/**
+         * No aria-label on the tally badge: aria-label is prohibited on a plain
+         * div, because no role supports naming it, so browsers drop the label
+         * and axe reports `aria-prohibited-attr`. The visible text already
+         * reads "2 votes", which is the same information.
+         */}
         {typeof tally === 'number' && (
-          <div className="vote-card-tally" aria-label={`Current votes: ${tally}`}>
+          <div className="vote-card-tally">
             <span className="tally-count">{tally}</span>
             <span className="tally-label">{tally === 1 ? 'vote' : 'votes'}</span>
           </div>
         )}
       </div>
 
+      {/*
+        The visible label names the candidate and that same text is the
+        button's accessible name, so the two can never diverge. An
+        `aria-label` like `Vote for ${entry}` sitting next to the visible
+        `Vote for this` failed WCAG 2.1 SC 2.5.3 (Label in Name, Level A),
+        because the accessible name must contain the text shown on screen.
+      */}
       <div className="vote-card-action">
         <button
           type="button"
           className={`vote-btn ${hasVoted ? 'vote-btn-voted' : ''}`}
           onClick={handleClick}
           disabled={disabled}
-          aria-label={hasVoted ? `Voted for ${entry}` : `Vote for ${entry}`}
           aria-pressed={hasVoted}
         >
           {hasVoted ? (
             <>
               <CheckCircle2 size={18} className="vote-btn-icon" aria-hidden="true" />
-              <span>Voted</span>
+              <span>Voted for {entry}</span>
             </>
           ) : (
             <>
               <Vote size={18} className="vote-btn-icon" aria-hidden="true" />
-              <span>{disabled ? 'Vote Closed' : 'Vote for this'}</span>
+              <span>{disabled ? 'Vote Closed' : `Vote for ${entry}`}</span>
             </>
           )}
         </button>

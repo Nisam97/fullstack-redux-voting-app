@@ -330,15 +330,22 @@ function Voting() {
               </p>
 
               {joinError && (
-                <div style={{
-                  padding: '0.6rem 0.8rem',
-                  borderRadius: '6px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: '#fca5a5',
-                  fontSize: '0.85rem',
-                  marginBottom: '1rem'
-                }}>
+                // role="alert" makes the failure announced the moment it
+                // appears. Without it the message is only discoverable by
+                // exploring past the form, which is the difference WCAG 2.1
+                // 4.1.3 (Status Messages, AA) asks about.
+                <div
+                  role="alert"
+                  style={{
+                    padding: '0.6rem 0.8rem',
+                    borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#fca5a5',
+                    fontSize: '0.85rem',
+                    marginBottom: '1rem'
+                  }}
+                >
                   {joinError}
                 </div>
               )}

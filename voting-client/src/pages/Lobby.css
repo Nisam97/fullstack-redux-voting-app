@@ -151,7 +151,7 @@
   justify-content: center;
 }
 
-.lobby-headcount-text h3 {
+.lobby-headcount-text h2 {
   font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
@@ -291,7 +291,7 @@
   font-size: 1.1rem;
 }
 
-.lobby-voter-details h4 {
+.lobby-voter-details h3 {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 600;

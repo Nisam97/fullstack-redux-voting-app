@@ -258,7 +258,14 @@ describe('Feature 5: Single Ballot Mode and Tie Ladder (Client Architecture)', (
       assert.strictEqual(formatResolution('no_result'), 'No Result');
       assert.strictEqual(formatResolution('zero_vote_replay'), 'Zero-Vote Replay');
       assert.strictEqual(formatResolution('majority_win', ['Dune: Part Two']), 'Winner: Dune: Part Two');
-      assert.strictEqual(formatResolution('tie_advance'), 'Tie — Re-queued');
+      assert.strictEqual(formatResolution('tie_advance'), 'Tie, Both Advanced');
+    });
+
+    it('5.1a formatResolution renders the exact AC-6 badge strings', () => {
+      // Spec 0003 AC-6 names these two literals, so the timeline badge must
+      // read exactly this rather than any paraphrase.
+      assert.strictEqual(formatResolution('majority_win'), 'Majority Win');
+      assert.strictEqual(formatResolution('tie_advance'), 'Tie, Both Advanced');
     });
 
     it('5.2 RESOLUTION_LABELS contains all spec 0004 resolution types', () => {

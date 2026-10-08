@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setVoterAuth } from "../redux/voterAuthSlice";
+import { setAdminSessionExpired } from "../redux/voteSlice";
 import { requestOtp, verifyOtp, loginAdmin } from "../services/auth";
 import { Mail, KeyRound, ArrowRight, Shield, AlertCircle, CheckCircle2, RotateCw } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
@@ -124,6 +125,9 @@ function Login() {
     }
 
     const dest = location.state?.from?.pathname || "/admin";
+    // A fresh credential clears the "your admin session is no longer valid"
+    // state that a rejected token set, so admin panels render normally again.
+    dispatch(setAdminSessionExpired(false));
     navigate(dest, { replace: true });
   };
 

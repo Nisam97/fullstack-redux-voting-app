@@ -898,3 +898,205 @@ All notable changes, architectural decisions, and progress updates for the Full-
 
 
 
+
+
+---
+
+### Date: 2026-10-04
+**Phase:** Phase 7: Secured Sessions (spec 0007, implemented, reviewed, and verified)  
+**Files Changed / Created:**
+* `voting-server/src/auth/voter.js` (Added `revokeSessionVoter` and `revokeSessionVoters`, which delete the issued token from `votersByToken` itself rather than only from the session headcount index, with a cross session guard so a `user:<id>` identity legitimately registered in a second session is left alone)
+* `voting-server/src/server.js` (Refactored the secured eligibility path and hardened removal: shared `resolveSessionAccess` and `evaluateSecuredEligibility` helpers, the `filterSessionsForCaller` visibility rule reused by the socket summary, the registry broadcast, and `GET /api/sessions`, a secured check before `subscribe_session` joins the room, one `revokeAndDisconnectVoter` path shared by lobby removal, deferred removal at `NEXT`, allowlist paste, and mode switch, a vote time eligibility recheck in `VOTE` that honours the deferred removal grace window, and clearing of pending removals when a session reaches a terminal state)
+* `voting-server/test/secured_sessions_regression_spec.js` (Created: 16 tests across all four entry points, including the negative cases and the roster lock at Start for both transports)
+* `voting-server/test/removal_token_revocation_spec.js` (Created: 8 tests pinning token revocation for lobby removal, deferred removal at `NEXT`, and allowlist paste in both allowlist and approval mode, voting from sockets that carry the removed voter's real `vs_voter` cookie)
+* `voting-server/test/secured_sessions_spec.js` (Modified: the old removal test voted from a socket with no handshake cookie, so it passed for an unrelated reason; it now asserts the server derived rejection)
+* `voting-client/src/services/socket.js` (Modified: reads the stored admin JWT at module load and passes it as handshake `auth`, adds `readStoredAdminToken()` and `applyAdminTokenToSocket()`)
+* `voting-client/src/services/auth.js` (Modified: `loginAdmin` and `logoutAdmin` call `applyAdminTokenToSocket`, which reconnects because Socket.io only transmits `auth` during the handshake)
+* `voting-client/src/pages/Admin.jsx` (Modified: re-subscribes to `subscribe_participants` on every `connect` so the roster stops freezing after a reconnect, and adds a confirmed Remove action on each allowlist row)
+* `voting-client/src/redux/voteSlice.js` (Modified: `handleLobbyUpdate` preserves `sessionType`, `type`, and `whoCanJoin` instead of rebuilding the entry from a fixed field list, and `removeParticipant` now targets an email rather than a voter token)
+* `voting-client/package.json` (Modified: `test` runs `test:unit` then `test:component`; the unit script globs `test/*_spec.js`; added Vitest, jsdom, and Testing Library)
+* `voting-client/vitest.config.js`, `voting-client/test/vitest.setup.js` (Created: component test runner and shared setup)
+* `voting-client/test/lobby_secured.test.jsx` (Created: 25 component tests for the secured lobby, including the sign in wall)
+* `voting-client/test/admin_roster_resubscribe.test.jsx` (Created: 6 tests proving the roster re-subscribes on `connect`)
+* `voting-client/test/admin_socket_auth_spec.js` (Created: handshake token regression coverage)
+* `voting-client/test/secured_session_client_spec.js` (Created: client unit coverage for the secured surfaces)
+* `AGENTS.md`, `voting-client/AGENTS.md` (Updated: recorded the eligibility admin actions, the passwordless voter cookie, the two session types, the `VoteParticipation` rule, and the two client test suites)
+* `docs/specs/0007-secured-sessions/index.md` (Status moved from Implemented to Accepted)
+* `docs/specs/0007-secured-sessions/verify.md` (Created: runtime verification record, 2026-10-03 and 2026-10-04 runs)
+* `docs/reviews/2026-10-03-develop1.md`, `docs/reviews/2026-10-03-develop1-rereview.md` (Created: two code reviews; the re-review raised the removal revocation blocker)
+* `docs/scope/scope.md` (Updated: Phase 7 marked done, verify, test, and review boxes ticked)
+
+**Major Architectural Changes:**
+1. **One eligibility gate for both entry points**:
+   * `POST /api/sessions/:sessionId/join` and the `join_session` socket event now call the same `evaluateSecuredEligibility`. Before this they had drifted, and the socket path registered any caller straight past the allowlist and the approval queue.
+   * `resolveSessionAccess` reads the store first and falls back to MongoDB, so a session that has not been hydrated yet is still gated.
+   * A secured session whose `whoCanJoin` value is unusable falls into a deny branch rather than falling through.
+2. **Secured visibility through one filter**:
+   * `filterSessionsForCaller(summary, isAdmin)` is now used by the socket summary, the registry broadcast, and `GET /api/sessions`, so an anonymous caller cannot enumerate secured sessions or their join codes by switching transports.
+   * `subscribe_session` resolves identity before joining the `session:<id>` room, so an ineligible subscriber never receives `session_state`.
+3. **Removal revokes the token, not just the roster row**:
+   * This was the blocker the 2026-10-03 re-review raised. Removal used to delete the allowlist or request row and the headcount entry, but the token stayed valid in `votersByToken`, and `validateVoterToken` accepted it through the `voter.sessionId === normSession` shortcut. A removed voter could keep casting counted votes while the admin roster showed them gone, and an allowlist paste that dropped a joined email did not disconnect them at all.
+   * Every removal route now goes through `revokeAndDisconnectVoter`: lobby removal, the deferred removal applied at `NEXT`, an allowlist paste that drops a joined email, and a mode switch that clears the roster.
+   * The removed voter's socket is disconnected, which AC-7 already promised.
+4. **Vote time eligibility recheck as defence in depth**:
+   * `VOTE` re-reads the voter's standing for secured sessions, so a removal, a rejection, or an allowlist paste takes effect on the next vote rather than the next reconnect. It fails closed when the lookup cannot be completed.
+   * The recheck skips the read while the voter's token sits in `pendingRemovalsBySession`, so a mid round removal does not cut the voter off during the round that was meant to remain theirs. `NEXT` clears that set after revoking, so the grace cannot outlive its round.
+5. **Admin identity rides the socket handshake**:
+   * `socket.js` reads the stored admin JWT at construction and passes it as handshake `auth`; `applyAdminTokenToSocket` reconnects whenever the token changes. Socket.io does not resend `auth` on a connected socket, so this was the fix for secured sessions being invisible in the admin panel until a manual reconnect.
+6. **Roster survives a reconnect**:
+   * Room membership dies with the connection, so `Admin.jsx` re-emits `subscribe_participants` on every `connect`. The roster no longer freezes until Manage is reopened.
+7. **The lobby reducer keeps its access fields**:
+   * `handleLobbyUpdate` was rebuilding the session entry from a fixed field list and silently dropped `sessionType`, `type`, and `whoCanJoin`, so a secured session looked open, the sign in wall never rendered, and an anonymous visitor was offered the plain join form. All three now survive the reducer, which matters because headcount only broadcasts arrive constantly during a live session.
+8. **Client never holds voter tokens for the roster**:
+   * `removeParticipant` takes an email. The admin allowlist panel only ever holds the email and the status, so the server resolves the email to a user and a token itself.
+9. **Component tests join the client suite**:
+   * Vitest with jsdom and Testing Library was added alongside the existing `node --test` unit specs. `npm test` now runs both, the unit script globs `test/*_spec.js` so a new spec file is picked up with no `package.json` edit, and Vitest globs its own `.test.jsx` files.
+10. **Protected pure engine preservation**:
+    * `voting-server/src/core.js` verified byte for byte identical (SHA-256: `b479f3f0b90c5bd81e1a813b3c5753179efeecd08a531aa833000b65188fb310`, 39 lines).
+
+**Verification and Quality Audit:**
+* **Backend Automated Tests:** `cd voting-server && npm test` → 648 passing, 0 failing.
+* **Frontend Unit Tests:** `cd voting-client && npm run test:unit` → 424 passing, 0 failing across 135 suites.
+* **Frontend Component Tests:** `cd voting-client && npm run test:component` → 31 passing, 0 failing across 2 files (25 lobby secured, 6 admin roster resubscribe).
+* **Runtime verification (2026-10-04, `docs/specs/0007-secured-sessions/verify.md`):** a real server on port 8090 against real MongoDB, the Vite client on 5173 driven in a real browser as admin and as an anonymous visitor, plus a real process restart. The first run failed 3 of 16 acceptance criteria. All three (AC-7 mid round removal, AC-11 the allowlist Remove button, AC-14 the sign in wall) were fixed and re-verified in a second run, which also confirmed the public session lobby is unaffected by the shared reducer change.
+* **Red checked:** reverting `revokeSessionVoter` to its old behaviour turns the lobby revocation, the deferred `NEXT` revocation, and the allowlist paste revocation red. Removing the vote time eligibility recheck turns its own test red. Disabling the `connect` re-subscribe turns the reconnect test red. Each layer is pinned independently.
+* **Code review:** two reviews, `docs/reviews/2026-10-03-develop1.md` and `docs/reviews/2026-10-03-develop1-rereview.md`. All six findings from the first review verified fixed; the re-review's blocker and two majors are fixed and covered above. The re-review notes that it ran on the same model as the author, so its fresh model guarantee is degraded.
+
+**Known gaps, not fixed here:**
+* The eligibility snapshot half of AC-7 has no automated test. The token revocation that achieves it is covered; the snapshot membership itself is not asserted, because building it needs a harness that closes round one and advances the ladder, and asserting on a later round that never opened would pass vacuously.
+* The admin roster reconnect fix was verified by component test, not re-driven in a browser during the second verification run.
+* `VoteParticipation` data is persisted but not yet surfaced. The admin per round turnout view is Phase 8.
+
+**Result:** Phase 7 (Secured sessions, spec 0007) is complete, verified at runtime, and accepted. Both "Who can join" modes work end to end, removal actually revokes access, the pending queue closes at Start, `VoteParticipation` stores no vote choice, duplicate secured votes are blocked after a real restart, and emails never appear in voter facing payloads.
+
+---
+
+### Date: 2026-10-04
+**Phase:** Phase 8: Visibility and Privacy (spec 0008, implemented, reviewed, and verified)
+**Files Changed / Created:**
+* `voting-server/src/db/models/Result.js` (Added `type` (enum `public` / `secured`, required, default `public`) and `publishResultsPublicly` (boolean, required, default false), both indexed, plus a compound index over `type`, `publishResultsPublicly`, and `completedAt`)
+* `voting-server/src/db/persistence.js` (Modified: `persistCompletedResult` takes `type` and `publishResultsPublicly` from the persisted `Session`, then the live store session, defaulting to `public` and to the session type)
+* `voting-server/src/db/repository.js` (Added `setPublishResultsPublicly`, which writes the `Result` row first, writes the `Session` mirror second, and rolls the `Result` row back if the mirror write throws, so the two copies cannot drift across a restart; Added `backfillResultTypes` and `countResultsWithoutType`; Modified `saveResultInner` to write the visibility fields on both the update and the insert path; Modified `getCompletedResults` so the archive lists public results plus published secured ones, and so a row with no `type` is never listed, because the archive is anonymous and cannot establish that such a row is public)
+* `voting-server/src/reducer.js` (Added the `SET_PUBLISH_RESULTS` case, which writes `publishResultsPublicly` onto the store session and accepts an archived session)
+* `voting-server/src/roundManager.js` (Modified: the `no_result` completion write carries the session's `type` and publish flag, so a session that ends with no champion is still gated correctly)
+* `voting-server/index.js` (Modified: startup runs `backfillResultTypes` and logs how many rows it filled; a failed backfill now reports the number of rows still untyped, and those rows are read as secured rather than public)
+* `voting-server/src/server.js` (Added `resolveResultVisibility`, one gate shared by the result, rounds, and lobby reads, which fails closed when no type can be resolved; Added `getAdminTokenFromRequest`, `isApprovedParticipant`, `buildSessionTurnout`, `emitSessionTurnout`, and `GET /api/sessions/:sessionId/turnout`; Added `subscribe_turnout` and `unsubscribe_turnout` plus the `session_turnout` emit after each round closes; Registered `SET_PUBLISH_RESULTS` in `ADMIN_ACTION_TYPES` and handled it authoritatively with `VALIDATION_ERROR`, `SESSION_NOT_FOUND`, `SESSION_NOT_COMPLETED`, and `DATABASE_ERROR`)
+* `voting-server/test/visibility_and_privacy_spec.js` (Created: 16 sections covering every acceptance criterion, including the leak guards that scan real registry, socket, lobby, and REST payloads for an email shaped value, and the archive round trip that a legacy public row reappears only once the backfill gives it a type)
+* `voting-client/src/pages/Results.jsx` (Added the admin "Result visibility" panel with the publish toggle and the per round turnout panel; Added the neutral unavailable state with a sign in prompt when the result read is gated; the publish toggle now waits for the server's acknowledgement, so it renders the value the server stored and clears its busy state on the server's real answer, with a ten second guard against a dropped connection; the toggle renders only for a secured session that has completed or been archived)
+* `voting-client/src/components/results/resultsUtils.js` (Added `buildTurnoutCsv`, which renders the admin per round turnout as RFC 4180 CSV with a zero turnout round kept as an empty row rather than dropped, and `turnoutCsvFilename`, which reduces the route's session id to characters that cannot escape the downloads folder; a cell beginning `=`, `+`, `-`, or `@` is prefixed with an apostrophe so a display name cannot be evaluated as a formula when an admin opens the file in a spreadsheet)
+* `voting-client/src/pages/Results.jsx` (Added a Download CSV button beside the per round turnout heading, admin only and disabled while there are no rounds; the file is built in the browser from the turnout payload the admin already has, so there is no new endpoint and no second fetch of the same data)
+* `voting-client/src/pages/Results.css` (Added the admin panel, turnout list, error line, and turnout heading row styles)
+* `voting-client/src/pages/History.jsx` (Modified: a completed session with no official champion now reads "No official champion was declared." instead of an empty winner banner)
+* `voting-client/src/pages/Admin.jsx` (Modified: the create session form no longer offers a Publish results publicly checkbox, and no longer sends `publishResultsPublicly` on `CREATE_SESSION`)
+* `voting-client/src/redux/voteSlice.js` (Added `SET_PUBLISH_RESULTS`, the local only `SET_PUBLISH_RESULTS_LOCAL`, and `SET_TURNOUT`, with `selectTurnout` and `selectPublishResultsPublicly`; `setPublishResults` takes an optional acknowledgement callback; Turnout is stored under `bySessionId` like every other session scoped field)
+* `voting-client/src/redux/store.js` (Registered `SET_PUBLISH_RESULTS` as a remote action carrying the admin token, and `SET_TURNOUT`, `session_turnout`, and `SET_PUBLISH_RESULTS_LOCAL` as local only so nothing loops back to the server; a remote action may now carry `meta.onAck`, which the middleware attaches as the Socket.io acknowledgement callback and strips from the wire payload)
+* `voting-client/src/services/socket.js` (Added `subscribeTurnout` and `unsubscribeTurnout`, which send the stored admin token with the subscription, and wired the `session_turnout` event into the slice)
+* `voting-client/src/services/history.js` (Modified: the history, result, and rounds fetches send `credentials: 'include'` and attach the admin Bearer header when an admin token is in storage, so a participant and the admin can both read a gated result)
+* `voting-client/test/results_visibility.test.jsx` (Created: 30 component tests for the gated panel, the admin toggle and turnout panel, the public session copy, the acknowledgement driven toggle, the turnout CSV export, and the non admin view)
+* `voting-client/test/turnout_csv_spec.js` (Created: 9 unit tests for the CSV builder: the header, one row per voter, a kept zero turnout round, the absence of any choice column, comma and quote escaping, the spreadsheet formula guard, bad input, column alignment when a voter has no name, server ordering, and the filename sanitiser)
+* `voting-client/test/visibility_privacy_client_spec.js` (Created: 12 unit tests over the new actions, selectors, the local only guarantee, and the acknowledgement wiring in the middleware)
+* `AGENTS.md`, `voting-client/AGENTS.md`, `voting-server/AGENTS.md` (Updated: recorded the results visibility rule, the admin only turnout view, and the client rules the new code depends on)
+* `docs/specs/0008-visibility-and-privacy/` (Created: `index.md`, `rationale.md`, `verify.md`)
+* `docs/reviews/2026-10-04-develop1.md` (Created: the fresh model review, which raised the publish refusal Major and three Minors)
+* `docs/scope/scope.md` (Updated: the Phase 8 build, verify, test, and review boxes ticked)
+
+**Major Architectural Changes:**
+1. **One visibility decision behind every result read**:
+   * `resolveResultVisibility` answers visible or denied plus the viewer kind, and the history, result, rounds, and lobby reads all call it. Before this the socket room was gated but the REST reads were not, so securing the roster left the tallies readable by anyone who knew a session id. Both October 3 reviews named this hole.
+   * A public result is never gated. A secured result is readable by its approved participants and the admin until the admin publishes it, and by everyone afterwards.
+   * A denied caller gets the same `404` a missing result returns, so an unpublished secured session is not discoverable by status code.
+2. **The gate fails closed, in the archive too**:
+   * When neither the `Result` row nor the session behind it yields a type, the read treats the row as secured rather than public, and logs it. This closes the review's third Minor, where a legacy row plus an unresolvable session resolved to public and served the result to everyone.
+   * `getCompletedResults` applies the same principle. A row with no `type` is not listed in the archive at all, because the archive is anonymous and cannot establish that the row is public. `backfillResultTypes` is the one path that gives a legacy row a type and puts it back, so a pre-spec public result returns to the archive at the next startup.
+   * `whoCanJoin` is consulted as a second signal on the lobby, the result and rounds gates, and the join code resolver, so an allowlist session whose `type` column says public is still treated as secured.
+   * A failed backfill no longer passes silently. Startup reports how many rows are still untyped, so the operator knows the gate is closed on them.
+3. **Publishing writes two rows without drifting**:
+   * `setPublishResultsPublicly` writes the `Result` row first, because every read keys off it, then mirrors onto `Session`, and undoes the first write if the second throws. This deployment runs a standalone MongoDB, so a transaction is unavailable; the compensating write is the honest equivalent. This is the review's fourth Minor, fixed.
+4. **Turnout reuses the audit trail that was already there**:
+   * `GET /api/sessions/:sessionId/turnout` and the `session_turnout` event list every round of a session in ascending order, with the signed in voters who voted in each round and an empty list where nobody voted. The round index is parsed from the pinned `roundId` format, so no new column is stored.
+   * Both surfaces are admin only. A non admin caller receives `404` from the endpoint and `UNAUTHORIZED` on the socket. Turnout never carries a vote choice, and an anonymous vote is absent by design.
+   * `emitSessionTurnout` returns before touching the database when no admin holds the turnout room, so the per round query costs nothing on the hot path.
+5. **The client's publish toggle tells the truth**:
+   * The toggle is not flipped on click. `SET_PUBLISH_RESULTS` is emitted with a Socket.io acknowledgement callback, and the server's answer is the only thing that moves the control: on success the server's own stored value is rendered, and on refusal the stored value simply stays and the server's reason is shown. The busy state clears when the answer arrives, not on a timer.
+   * The two shared server gates that guard every admin action, the action allowlist check and the admin token check, now answer through the same `respond` helper the action handlers use, so an admin action never leaves a waiting client hanging. `respond` still emits `action_error`, so anything listening only for that event is unaffected.
+   * A ten second client side timer remains purely as a guard against a dropped connection, so the control can never stick spinning. It applies nothing, because nothing is applied until the answer lands.
+6. **The leak guard is standing, not incidental**:
+   * The server suite scans the registry broadcast, `session_state`, the secured lobby, an anonymous refusal, a joined member's payload, and a gated `404` body for an email shaped value. A matching value fails the suite rather than shipping.
+7. **The turnout export adds no attack surface**:
+   * The CSV is assembled in the browser from the turnout payload the admin has already been sent, so there is no new endpoint, no new query, and no new server side path to get wrong. The export can only ever contain what the admin was already shown.
+   * The button lives inside the panel that is already gated on the admin token, so a participant or anonymous viewer cannot reach it, and the component test asserts that even with the turnout already sitting in Redux.
+   * The file carries who voted and in which round. There is no choice column, and the tests assert the exact header as well as the absence of any choice, tally, or winner word.
+   * Voter display names are attacker controlled and this file is opened in a spreadsheet, so a name starting with `=`, `+`, `-`, or `@` is prefixed with an apostrophe rather than evaluated on open.
+8. **Protected pure engine preserved**:
+   * `voting-server/src/core.js` verified byte for byte identical (SHA-256: `b479f3f0b90c5bd81e1a813b3c5753179efeecd08a531aa833000b65188fb310`, 39 lines).
+
+**Follow up delivered with this phase**: the spec's open item to surface turnout as an export for the admin is now implemented. See the numbered change above on the turnout export, and `voting-client/test/turnout_csv_spec.js` for its coverage.
+
+**Verification and Quality Audit:**
+* **Backend Automated Tests:** `cd voting-server && npm test` → 694 passing, 0 failing. An earlier run was 691 passing with 1 failing: section 16 of `voting-server/test/visibility_and_privacy_spec.js` pins that the archive never lists a row whose type cannot be resolved, and it was red because `getCompletedResults` still treated a missing `type` as public. That filter now fails closed, and a companion test asserts the round trip (a legacy public row reappears in the archive once the backfill gives it a type, while a legacy secured row does not). Both were confirmed to turn red when the fix was reverted.
+* **Frontend Unit Tests:** `cd voting-client && npm test` → 456 unit passing, then 68 component passing across 3 files, 0 failing.
+* **Frontend Lint:** `cd voting-client && npm run lint` → clean.
+* **Frontend Build:** `cd voting-client && npm run build` → builds with no errors. The only output is the pre existing chunk size warning.
+* **Runtime verification:** `docs/specs/0008-visibility-and-privacy/verify.md` records a full pass on 2026-10-04 against a real server on port 8091, a real MongoDB 8.2 in an isolated database, and the Vite client driven in a real Chromium as admin, as an approved participant, and as an anonymous outsider. A real emailed OTP sign in was completed, the secured session was joined, voted and completed end to end, and the per criterion results are recorded there. The server logged no errors during the run.
+
+**Known gaps, not fixed here:**
+* The lobby answers `200` with title, status, `whoCanJoin`, and counts for a gated secured session while an unknown id answers `404`, so a caller holding a session id can still tell that it exists. The spec deliberately keeps the lobby public and gates only the `winner`, and AC-2's closing sentence sits next to that carve out, so this wants one clarifying line in the spec rather than a code change.
+* A publish that the server never answers leaves the control busy until the ten second guard fires. That is deliberate: the alternative is guessing. Nothing is applied optimistically, so the displayed value stays correct throughout.
+* `selectSessionRounds` still returns a fresh empty array when a session has no rounds, which trips a react-redux stability warning. `selectTurnout` had the same fault and was fixed to return one shared frozen array; `selectSessionRounds` was left alone as pre existing and outside this feature.
+* Turnout widens the amount of voter email in memory for the admin. It is intended, and the participant roster already showed these addresses, but it is a surface to keep an eye on.
+* Publishing is post completion only, so an admin cannot pre announce that a secured result will become public.
+
+**Result:** Phase 8 (Visibility and privacy, spec 0008) is implemented, reviewed, and verified at runtime. A secured session's result is now hidden from outsiders until the admin publishes it, the history archive respects the same rule, the admin can see who voted in each round without ever seeing what they chose, and a standing test fails if an email ever reaches a voter facing payload. Both server suites are green. One acceptance criterion remains open: the history listing does not carry a result's type, so a published secured session is listed with no way to tell it apart from a public one.
+
+---
+
+### Date: 2026-10-06
+**Phase:** Phase 9 — Hardening and Docs (rate limits, response timing parity, accessibility pass, v2 documentation)
+
+**Files Changed / Created:**
+* `voting-server/src/utils/rateLimit.js` (Created: `createFixedWindowStore` and `consumeFixedWindow`, one fixed window counter primitive now shared by the join resolver and the OTP request route)
+* `voting-server/src/utils/timing.js` (Created: `DEFAULT_MIN_RESPONSE_MS`, `getMinResponseMs`, `remainingResponsePadMs`, and `padToMinimumDuration`, the response floor that stops the clock from answering a question the body refuses to)
+* `voting-server/src/server.js` (Modified: `checkJoinRateLimit` reimplemented on the shared primitive with its exports, constants, and refusal body unchanged; added `OTP_RATE_LIMIT_WINDOW_MS`, `OTP_RATE_LIMIT_MAX_PER_EMAIL`, `OTP_RATE_LIMIT_MAX_PER_IP`, `getOtpRateLimitMaxPerEmail`, `getOtpRateLimitMaxPerIp`, `checkOtpRequestRateLimit`, `resetOtpRequestRateLimit`, and `createPacedResponder`; the OTP request handler now rate limits by email and by client address before any database work and answers every reply through the paced responder with an `error: 'RATE_LIMITED'` body and a `Retry-After` header; the join resolver answers every reply through the same paced responder)
+* `voting-server/test/hardening_rate_limits_and_timing_spec.js` (Created: 16 tests over the limiter primitive, the timing helper, both OTP ceilings at unit and HTTP level, the `TRUST_PROXY` address keying, and hit versus miss timing bands for the join resolver and the OTP route)
+* `voting-server/test/test_helper.js` (Modified: raises the OTP ceilings for the shared suite, because they are per hour and every test request arrives from one address; the hardening spec sets the real values back for its own cases)
+* `voting-client/test/a11y_voting_and_lobby.test.jsx` (Created: 8 tests running `axe-core` over the voting arena, the join prompt, and the four lobby states, plus a self check that pins the scanner itself)
+* `voting-client/src/pages/Voting.jsx` (Modified: the join failure message carries `role="alert"`, so a refusal is announced instead of only being findable by exploring past the form)
+* `voting-client/src/components/layout/Navbar.jsx` (Modified: the `Sign in` control is one link styled as a button rather than a button nested in a link, so the same control is not exposed twice)
+* `voting-client/package.json`, `voting-client/package-lock.json` (Modified: added `axe-core`, the accessibility engine the pass is measured with)
+* `.env.example` (Modified: documented `API_MIN_RESPONSE_MS`, `OTP_RATE_LIMIT_MAX_PER_EMAIL`, and `OTP_RATE_LIMIT_MAX_PER_IP`)
+* `README.md`, `docs/ARCHITECTURE.md`, `docs/API_CONTRACT.md`, `docs/USER_MANUAL.md` (Updated: the hardening behaviour, the real REST route list, the new environment variables, and the current test counts; the user manual's stale "the backend does not maintain individual voter ballot records" notice was replaced with the actual round scoped duplicate vote rule and the choice free `VoteParticipation` record)
+* `docs/scope/scope.md` (Updated: Phase 9 build box and code pointer)
+
+**Major Architectural Changes:**
+1. **One rate limit primitive, two call sites:**
+   * `consumeFixedWindow` takes a store, a key, a window, and a ceiling, and returns whether the attempt is allowed plus the remaining wait. The join resolver's pre existing limiter now delegates to it, so there is one implementation rather than two copies.
+   * The OTP request route is limited on both an email key (5 per hour) and a client address key (20 per hour). Both keys are charged on every attempt, including one that is already refused, so pacing requests cannot keep a key permanently open. A malformed body still charges the address, which is the only key that exists in that case.
+   * The ceilings are read through getters, so an operator can raise them by environment variable and the shared test suite can raise them for specs that are not about limiting.
+2. **The clock stops being an oracle:**
+   * `padToMinimumDuration` holds a response open until a floor has elapsed, and `createPacedResponder` routes every reply on the OTP request and join resolver paths through it. A `400`, a `429`, a `500`, a hit, and a miss therefore all take the same time.
+   * The floor is a floor, not a delay: a handler that already ran longer is not held back. It cannot outrun genuinely slow work, and that limit is stated rather than hidden.
+   * `API_MIN_RESPONSE_MS` sets the value and `0` disables it.
+3. **Accessibility becomes a test, not an opinion:**
+   * The voting and lobby screens are scanned with `axe-core` under Vitest, gated on no critical or serious violation. The colour contrast rule is excluded because jsdom performs no layout, and that exclusion is documented rather than silently relied on.
+   * Because every assertion is "axe found nothing", the spec carries a self check that scans an unlabelled image and requires `image-alt` back. Without it, a scanner regression would make the file pass while checking nothing.
+4. **The user manual told the truth about the ballot model again:**
+   * The manual still carried an MVP era notice claiming the backend keeps only aggregate counters and no per voter record. That has been wrong since the duplicate vote key and `VoteParticipation` landed, so the notice now states the actual rule, including that the audit trail stores the voter and the round but never the choice.
+
+**Verification and Quality Audit:**
+* **Backend Automated Tests:** `cd voting-server && npm test` → **799 passing, 0 failing** (exit 0).
+* **Frontend Unit Tests:** `cd voting-client && npm run test:unit` → **468 passing, 0 failing** across 139 suites.
+* **Frontend Component Tests:** `cd voting-client && npm run test:component` → **123 passing, 0 failing** across 6 files.
+* **Frontend Lint:** `cd voting-client && npm run lint` → clean, exit 0.
+* **Frontend Build:** `cd voting-client && npm run build` → built in 6.46s, exit 0, with only the pre existing chunk size warning.
+* **Red checked:** reverting the navbar fix was confirmed NOT to change the accessibility result, because axe does not flag a button nested in a link. The navbar change is kept as correct markup on its own merits, and the claim that axe catches it was removed from both the code comment and the documentation.
+* **Scanner self check:** a scratch probe confirmed axe under jsdom reports `image-alt` (critical) and `aria-command-name` (serious) on a deliberately broken tree, so the empty results for the real screens are meaningful rather than vacuous.
+* **Protected core:** `voting-server/src/core.js` was not touched.
+
+**Known gaps, not fixed here:**
+* The rate limit counters are held in process memory and reset on restart. A multi process or multi host deployment needs a shared store before the limits mean anything across workers.
+* Colour contrast is not machine checked. jsdom performs no layout, so the rule cannot resolve a foreground and background pair. It remains a browser or manual check.
+* The timing floor cannot mask work that is slower than the floor itself. A cold database or a slow SMTP handshake still shows a longer response.
+* The accessibility pass covers the voting arena, the join prompt, and the lobby states, which is what the scope names. The admin panel, the results page, and the archive were not audited.
+* The backend still reads no `.env` file: `index.js` has no dotenv load, so the variables in `.env.example` must be exported in the shell or supplied by the process manager. This is pre existing and was left alone.
+
+**Result:** Phase 9 (Hardening and docs) is built and self checked. The OTP request route and the join resolver both enforce their ceilings, a refusal is answered with a `429` and a `Retry-After`, neither route can be timed to learn whether an address is registered or a code exists, the voting and lobby screens pass an axe audit with a guard that keeps the audit honest, and `README`, `ARCHITECTURE`, `API_CONTRACT`, and `USER_MANUAL` describe the behaviour that actually ships. Both suites, lint, and the production build are green.

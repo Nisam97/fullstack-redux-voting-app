@@ -6,7 +6,7 @@
 **Current Branch:** `develop1`  
 **Transport Protocols:** HTTP/REST & WebSocket / Socket.io (`http://<host>:8090` / `ws://<host>:8090`)  
 **Data Format:** Serialized JSON  
-**Reference:** [ARCHITECTURE.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/ARCHITECTURE.md), [PROJECT_PROGRESS.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/PROJECT_PROGRESS.md), [CHANGELOG.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/CHANGELOG.md)
+**Reference:** [Architecture.md](../Architecture.md) (docs/ARCHITECTURE.md is retired), [PROJECT_PROGRESS.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/PROJECT_PROGRESS.md), [CHANGELOG.md](file:///d:/Mine_project/fullstack-redux-voting-app/docs/CHANGELOG.md)
 
 ---
 
@@ -917,3 +917,38 @@ ADMIN_PASSWORD=adminPassword123!
 | `ADMIN_USERNAME` | `string` | `'admin'` | Username for the single global admin account. |
 | `ADMIN_EMAIL` | `string` | `'admin@votesphere.local'` | Email address for the single global admin account. |
 | `ADMIN_PASSWORD` | `string` | `'adminPassword123!'` | Initial plaintext password hashed via bcrypt on startup. |
+| `API_MIN_RESPONSE_MS` | `number` | `100` | Minimum milliseconds the OTP request and join code routes stay open before answering. `0` disables the floor. |
+| `OTP_RATE_LIMIT_MAX_PER_EMAIL` | `number` | `5` | Hourly OTP request ceiling for one email address. |
+| `OTP_RATE_LIMIT_MAX_PER_IP` | `number` | `20` | Hourly OTP request ceiling for one client address. |
+
+---
+
+## 5. Rate Limiting, Response Timing & Access Gating
+
+Three routes answer a question whose answer is a secret, and each one is shaped so the answer cannot be read off the response. A guess, a miss, and a refusal are made to look and take the same time as a hit.
+
+### 5.1 Rate limits
+
+| Route | Key | Ceiling | Refusal |
+|---|---|---|---|
+| `GET /api/join/:code` | Client address | 30 per minute | `429` `{ "error": "Too many requests, please wait." }` |
+| `POST /api/auth/otp/request` | Email address | 5 per hour | `429` `{ "success": false, "error": "RATE_LIMITED", ... }` |
+| `POST /api/auth/otp/request` | Client address | 20 per hour | same as above |
+
+* All three counters are fixed window, held in memory, and reset on restart. They are per process, so a multi process deployment would need a shared store before it could enforce them across workers.
+* The OTP route charges both of its keys on every attempt, including an attempt that is already over the ceiling, so pacing requests cannot keep a key permanently open. The email key is charged only when the submitted address is well formed; a malformed body still charges the client address, which is the only key that exists in that case.
+* The OTP ceilings are checked before any database work or email send, so an exhausted caller costs nothing.
+* A refusal answers with a `Retry-After` header in whole seconds, and the OTP body repeats the wait as `retryAfterSeconds`.
+* The client address comes from the socket address unless `TRUST_PROXY=true`, in which case the first `x-forwarded-for` entry is used. Without that opt in, a client sent header cannot be used to rotate addresses past the per address limiter.
+
+### 5.2 Response timing parity
+
+The OTP request route and the join code resolver already answer a hit and a miss with the same status and the same body. Two paths still differ in the work they do (the registration path runs one more lookup than the login path; the code lookup runs for every well formed code), so the wall clock remained a signal. Both routes now hold every reply open until `API_MIN_RESPONSE_MS` (default 100 ms) has elapsed since the request was received.
+
+* The floor applies to every reply on those routes, including a refusal, a `400`, and a `500`, so no branch is measurably faster than another.
+* The floor is a floor, not a delay: a handler that already ran longer than the floor is not held back any further.
+* It cannot make a genuinely slow path fast. If the underlying work outruns the floor (a cold database, a slow SMTP handshake), the timing signal returns. That is the honest limit of the technique, and the reason the default sits comfortably above a warm indexed read.
+
+### 5.3 Gated reads fail closed and answer neutrally
+
+The result, rounds, and lobby reads all go through one visibility decision (`resolveResultVisibility`). A caller who may not see a secured session receives the same status and the same body that an unknown id receives, so a read never confirms that a gated session exists. This is covered in more detail with the result endpoints above; it is repeated here because it is the same principle the timing floor applies to the clock.

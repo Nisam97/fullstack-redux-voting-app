@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import makeStore from './store';
 import { bootstrapDefaultSession, bootstrapHorrorSession } from './bootstrap';
 import { seedAdmin, verifyAdminCredentials, generateAdminToken, verifyAdminToken } from './auth/admin';
-import { registerVoter, validateVoterToken, canCastVote, recordVote, getVoterCount, releaseSessionVoters, tokensBySession } from './auth/voter';
+import { registerVoter, validateVoterToken, canCastVote, recordVote, getVoterCount, releaseSessionVoters, revokeSessionVoter, revokeSessionVoters, votersByToken, tokensBySession } from './auth/voter';
 import { createChallenge, verifyChallenge, isValidEmail, isValidUsername, cancelChallenge, escapeRegex } from './auth/otp.js';
 import { sendOtpEmail } from './email/transport.js';
 import {
@@ -25,6 +25,8 @@ import { persistStateChanges } from './db/persistence';
 import timerManager from './timer';
 import roundManager from './roundManager';
 import { generateJoinCode } from './utils/joinCode.js';
+import { createFixedWindowStore, consumeFixedWindow } from './utils/rateLimit.js';
+import { padToMinimumDuration } from './utils/timing.js';
 import { SINGLE_BALLOT_MAX } from './constants.js';
 import Session from './db/models/Session.js';
 
@@ -43,7 +45,8 @@ export const ADMIN_ACTION_TYPES = new Set([
   'APPROVE_PARTICIPANT',
   'REJECT_PARTICIPANT',
   'REMOVE_PARTICIPANT',
-  'SET_WHO_CAN_JOIN'
+  'SET_WHO_CAN_JOIN',
+  'SET_PUBLISH_RESULTS'
 ]);
 
 /**
@@ -210,13 +213,19 @@ export function getSessionsSummary(state) {
  * rounds REST endpoint). Keeping it in one place prevents the socket and
  * REST paths from drifting apart again.
  *
- * Rules:
- * - `rounds` is stripped unless the round is closed/revealed or the session is completed.
- * - `finalVote` (which carries the frozen tally) is stripped unless the round
- *   results are actively being revealed, or the session is completed. The
- *   reveal window still needs the tallies for the results view, so the guard
- *   only blocks the pre reveal states (VOTING, ROUND_CLOSED) and terminal
- *   lifecycle states where no reveal is running.
+ * Rules, three carriers gated by two rules (spec 0003 AC-3, amended 2026-10-05):
+ * - `rounds` is the settled history of rounds that have already closed, so it
+ *   is released as soon as a round closes: at ROUND_CLOSED, RESULTS_REVEALED,
+ *   or a concluded session.
+ * - `finalVote` carries the round that has just closed and is still waiting
+ *   for its reveal, so it is withheld at VOTING, ROUND_CLOSED and TIE_PENDING,
+ *   and released only at RESULTS_REVEALED or a conclusion.
+ * - The live `vote.tally` follows `finalVote` exactly, because at ROUND_CLOSED
+ *   it holds the same frozen numbers. It is emptied to `{}` rather than
+ *   deleted, so the client keeps the vote shape.
+ * Do not collapse these into one flag: that is what made the implementation
+ * stricter than the contract, and it would publish the just closed round's
+ * tally through `vote.tally` while still withholding it via `finalVote`.
  *
  * @param {Object} sessionObj - Plain object form of the session (mutated in place)
  * @param {Object} [roundContext] - Optional round lifecycle context for REST reads
@@ -230,10 +239,30 @@ export function applyTallyVisibilityGuard(sessionObj, roundContext = {}) {
 
   const sessionConcluded = status === 'completed';
   const revealActive = roundLifecycle === 'RESULTS_REVEALED';
+  const roundClosed = roundLifecycle === 'ROUND_CLOSED';
+  const roundLive = roundLifecycle === 'VOTING';
+  const tiePending = roundLifecycle === 'TIE_PENDING';
+  // A session recovered from a mid tournament crash comes back as 'pending'
+  // with no live round: the timers and the in flight round are lost, but every
+  // entry in `rounds[]` is a frozen snapshot the server already broadcast to
+  // everyone when its round closed. Withholding it there reveals nothing new
+  // and only makes the socket and the REST read disagree with the persisted
+  // history the results page already renders, so settled history is released.
+  // A TIE_PENDING window is excluded: a tie awaiting an admin decision is not
+  // yet a settled outcome, so all three carriers stay withheld there.
+  const recoveredHistory = status === 'pending'
+    && !roundLive
+    && !tiePending
+    && Array.isArray(sessionObj.rounds)
+    && sessionObj.rounds.length > 0;
+
+  const historyVisible = sessionConcluded || revealActive || roundClosed || recoveredHistory;
   const tallyVisible = sessionConcluded || revealActive;
 
-  if (!tallyVisible) {
+  if (!historyVisible) {
     delete sessionObj.rounds;
+  }
+  if (!tallyVisible) {
     delete sessionObj.finalVote;
     // The live tally is also hidden while a round is active (AGENTS.md: tallies
     // stay hidden during an active round). Voters see their own vote confirmed
@@ -358,7 +387,7 @@ export async function getUniqueJoinCode(maxAttempts = 10) {
 
 export const JOIN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 export const JOIN_RATE_LIMIT_MAX = 30;
-export const joinRateLimitMap = new Map();
+export const joinRateLimitMap = createFixedWindowStore();
 
 /**
  * In memory reverse index resolving socket ID to session and voter token.
@@ -375,21 +404,10 @@ export const socketToVoter = new Map();
  * @returns {boolean}
  */
 export function checkJoinRateLimit(clientIp) {
-  const ipKey = clientIp || 'unknown';
-  const now = Date.now();
-  const entry = joinRateLimitMap.get(ipKey);
-
-  if (!entry || (now - entry.windowStart) >= JOIN_RATE_LIMIT_WINDOW_MS) {
-    joinRateLimitMap.set(ipKey, { count: 1, windowStart: now });
-    return true;
-  }
-
-  if (entry.count >= JOIN_RATE_LIMIT_MAX) {
-    return false;
-  }
-
-  entry.count += 1;
-  return true;
+  return consumeFixedWindow(joinRateLimitMap, clientIp || 'unknown', {
+    windowMs: JOIN_RATE_LIMIT_WINDOW_MS,
+    max: JOIN_RATE_LIMIT_MAX
+  }).allowed;
 }
 
 /**
@@ -397,6 +415,104 @@ export function checkJoinRateLimit(clientIp) {
  */
 export function resetJoinRateLimit() {
   joinRateLimitMap.clear();
+}
+
+export const OTP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const OTP_RATE_LIMIT_MAX_PER_EMAIL = 5;
+export const OTP_RATE_LIMIT_MAX_PER_IP = 20;
+export const otpRateLimitByEmail = createFixedWindowStore();
+export const otpRateLimitByIp = createFixedWindowStore();
+
+/**
+ * Reads a positive integer override, falling back to the built in ceiling.
+ *
+ * @param {string} [value]
+ * @param {number} fallback
+ * @returns {number}
+ */
+function resolvePositiveInt(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Effective per email ceiling. `OTP_RATE_LIMIT_MAX_PER_EMAIL` raises it for a
+ * deployment that wants a looser budget.
+ *
+ * @param {Object} [env]
+ * @returns {number}
+ */
+export function getOtpRateLimitMaxPerEmail(env = process.env) {
+  return resolvePositiveInt(env && env.OTP_RATE_LIMIT_MAX_PER_EMAIL, OTP_RATE_LIMIT_MAX_PER_EMAIL);
+}
+
+/**
+ * Effective per client address ceiling. `OTP_RATE_LIMIT_MAX_PER_IP` raises it.
+ *
+ * @param {Object} [env]
+ * @returns {number}
+ */
+export function getOtpRateLimitMaxPerIp(env = process.env) {
+  return resolvePositiveInt(env && env.OTP_RATE_LIMIT_MAX_PER_IP, OTP_RATE_LIMIT_MAX_PER_IP);
+}
+
+/**
+ * Checks the OTP request rate limits: 5 requests per hour per email address and
+ * 20 per hour per client address.
+ *
+ * Both keys are always charged, even when one of them is already exhausted, so
+ * an attacker cannot keep an email bucket open by pacing across addresses or
+ * keep an address bucket open by rotating the email. The email key is charged
+ * only when the submitted address is well formed; a malformed body still counts
+ * against the address, which is the key that exists in that case.
+ *
+ * @param {Object} params
+ * @param {string} [params.email] - Normalized (lowercased, trimmed) email
+ * @param {string} [params.clientIp]
+ * @returns {{ allowed: boolean, retryAfterMs: number }}
+ */
+export function checkOtpRequestRateLimit({ email, clientIp }) {
+  const emailResult = email
+    ? consumeFixedWindow(otpRateLimitByEmail, email, {
+        windowMs: OTP_RATE_LIMIT_WINDOW_MS,
+        max: getOtpRateLimitMaxPerEmail()
+      })
+    : { allowed: true, retryAfterMs: 0 };
+
+  const ipResult = consumeFixedWindow(otpRateLimitByIp, clientIp || 'unknown', {
+    windowMs: OTP_RATE_LIMIT_WINDOW_MS,
+    max: getOtpRateLimitMaxPerIp()
+  });
+
+  return {
+    allowed: emailResult.allowed && ipResult.allowed,
+    retryAfterMs: Math.max(emailResult.retryAfterMs, ipResult.retryAfterMs)
+  };
+}
+
+/**
+ * Resets both OTP request rate limiter maps.
+ */
+export function resetOtpRequestRateLimit() {
+  otpRateLimitByEmail.clear();
+  otpRateLimitByIp.clear();
+}
+
+/**
+ * Builds a responder that holds every reply on this route open until the
+ * response timing floor has elapsed (spec 0009 hardening). Routes that answer a
+ * question about a secret use it so the wall clock cannot distinguish a hit
+ * from a miss.
+ *
+ * @param {Object} res - HTTP response
+ * @param {number} startedAt - Date.now() captured at the top of the handler
+ * @returns {(statusCode: number, data: Object, headers?: Object) => Promise<void>}
+ */
+function createPacedResponder(res, startedAt) {
+  return async (statusCode, data, headers = {}) => {
+    await padToMinimumDuration(startedAt);
+    sendJson(res, statusCode, data, headers);
+  };
 }
 
 /**
@@ -434,12 +550,115 @@ export function isSocketAdmin(socket) {
  * @param {Map} state - Redux store state
  * @returns {Array<Object>}
  */
-export function getSocketSessionsSummary(socket, state) {
-  const summary = getSessionsSummary(state);
-  if (isSocketAdmin(socket)) {
-    return summary;
-  }
+export function filterSessionsForCaller(summary, isAdmin) {
+  if (isAdmin) return summary;
   return summary.filter((s) => s.type !== 'secured');
+}
+
+/**
+ * True when the voter identity derived from the verified `vs_voter` cookie is an
+ * approved participant of the session: on the allowlist, or holding an approved
+ * join request (spec 0008 AC-2). Fails closed when the lookup cannot complete.
+ *
+ * @param {Object} params
+ * @param {string} params.sessionId
+ * @param {string} [params.voterUserId]
+ * @param {string} [params.voterEmail]
+ * @returns {Promise<boolean>}
+ */
+export async function isApprovedParticipant({ sessionId, voterUserId, voterEmail }) {
+  if (!sessionId || !isConnected()) return false;
+  try {
+    const email = String(voterEmail || '').toLowerCase().trim();
+    if (email) {
+      const allowEntry = await SessionAllowlistEntry.findOne({ sessionId, email }).lean();
+      if (allowEntry) return true;
+    }
+    if (voterUserId) {
+      const approved = await SessionJoinRequest.findOne({
+        sessionId,
+        userId: voterUserId,
+        status: 'approved'
+      }).lean();
+      if (approved) return true;
+    }
+  } catch (err) {
+    console.error('[Visibility] Participant eligibility lookup failed:', err.message);
+  }
+  return false;
+}
+
+/**
+ * The single visibility decision for a session's result, shared by the history
+ * archive, the result and rounds reads, and the lobby winner field (spec 0008
+ * AC-1, AC-2, AC-4, AC-6). A public result is always visible; a secured result
+ * is visible to its approved participants and the admin until published, and to
+ * everyone once published. A legacy result with no `type` falls back to the
+ * session type.
+ *
+ * @param {Object} params
+ * @param {Object|null} params.result Result row; may be null for a live session
+ * @param {string|null} [params.sessionType] Fallback type when the result has none;
+ *   `null` means the session behind the result could not be resolved at all
+ * @param {string} [params.adminToken] Admin JWT candidate from the request
+ * @param {string} [params.voterCookie] Raw `vs_voter` token from the request
+ * @returns {Promise<{ visible: boolean, viewerKind: 'public'|'admin'|'participant'|'denied', type: string }>}
+ */
+export async function resolveResultVisibility({ result = null, sessionType = null, adminToken = null, voterCookie = null }) {
+  // Fails closed (spec 0008 AC-1, AC-2). When neither the Result row nor the
+  // session behind it yields a type, the row is a legacy row the backfill never
+  // reached or a session that cannot be resolved at all. Reading that as
+  // 'public' served a secured result to everyone, so an unresolved type is
+  // gated as 'secured' instead: the admin and the approved participants still
+  // get through, everyone else gets the same 404 a missing result returns.
+  const resolvedType = (result && result.type) || sessionType || null;
+  if (!resolvedType) {
+    console.warn(
+      `[Visibility] Result "${result ? result.sessionId : 'unknown'}" has no resolvable type; gating it as secured until the backfill runs`
+    );
+  }
+  const type = resolvedType || 'secured';
+
+  if (type !== 'secured') {
+    return { visible: true, viewerKind: 'public', type };
+  }
+  if (result && result.publishResultsPublicly === true) {
+    return { visible: true, viewerKind: 'public', type };
+  }
+  if (adminToken && verifyAdminToken(adminToken).valid) {
+    return { visible: true, viewerKind: 'admin', type };
+  }
+  if (voterCookie) {
+    const auth = verifyVoterToken(voterCookie);
+    if (auth.valid && auth.payload) {
+      const eligible = await isApprovedParticipant({
+        sessionId: result ? result.sessionId : null,
+        voterUserId: auth.payload.userId,
+        voterEmail: auth.payload.email
+      });
+      if (eligible) {
+        return { visible: true, viewerKind: 'participant', type };
+      }
+    }
+  }
+  return { visible: false, viewerKind: 'denied', type };
+}
+
+/**
+ * Resolves the admin JWT candidate from a REST request. Reads the Authorization
+ * Bearer header first, then the raw header (the pattern GET /api/sessions uses).
+ *
+ * @param {Object} req
+ * @returns {string|null}
+ */
+export function getAdminTokenFromRequest(req) {
+  const header = (req && req.headers && req.headers.authorization) || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : header;
+  return token || null;
+}
+
+export function getSocketSessionsSummary(socket, state) {
+  return filterSessionsForCaller(getSessionsSummary(state), isSocketAdmin(socket));
 }
 
 /**
@@ -452,7 +671,7 @@ export function getSocketSessionsSummary(socket, state) {
 export function broadcastSessions(ioInstance, summaryOrState) {
   if (!ioInstance) return;
   const fullSummary = Array.isArray(summaryOrState) ? summaryOrState : getSessionsSummary(summaryOrState);
-  const publicSummary = fullSummary.filter((s) => s.type !== 'secured');
+  const publicSummary = filterSessionsForCaller(fullSummary, false);
 
   const sockets = ioInstance.sockets?.sockets;
   if (sockets && typeof sockets.values === 'function') {
@@ -466,9 +685,7 @@ export function broadcastSessions(ioInstance, summaryOrState) {
   } else {
     ioInstance.emit('sessions', publicSummary);
   }
-}
-
-/**
+}/**
  * Tracks voter tokens pending deferred removal at the conclusion of an active round.
  * Map<sessionId, Set<voterToken>>
  */
@@ -650,6 +867,432 @@ export default function startServer(store, port = 8090) {
 
   let io;
 
+  /**
+   * Derives a session's type from the signals a session actually carries, and
+   * fails closed when it carries none.
+   *
+   * `whoCanJoin` is checked first: a session gated to an allowlist or an
+   * approval queue is secured whatever its `type` column claims, and a secured
+   * session cannot legitimately declare `whoCanJoin: 'public'`. `type` (or the
+   * store's `sessionType`) is the declared answer for everything else. A session
+   * that resolved but declares neither predates secured sessions and is public.
+   * A session that did not resolve at all yields `null`, and every caller treats
+   * `null` as secured.
+   *
+   * @param {Object} params
+   * @param {string|null} [params.type] Declared `type`
+   * @param {string|null} [params.sessionType] Store's `sessionType` alias
+   * @param {string|null} [params.whoCanJoin] Declared join mode
+   * @param {boolean} [params.resolved] Whether the session was found at all
+   * @returns {'public'|'secured'|null}
+   */
+  function deriveSessionType({ type = null, sessionType = null, whoCanJoin = null, resolved = true } = {}) {
+    if (whoCanJoin && whoCanJoin !== 'public') {
+      return 'secured';
+    }
+    const declared = type || sessionType || null;
+    if (declared === 'secured' || declared === 'public') {
+      return declared;
+    }
+    return resolved ? 'public' : null;
+  }
+
+  /**
+   * Resolves how a session controls entry: whether it is secured at all, and
+   * which whoCanJoin mode it uses. Reads the store first (fast path) and falls
+   * back to MongoDB so a session that has not been hydrated yet is still gated.
+   *
+   * A session neither source can produce resolves as secured, so an
+   * unresolvable session is never treated as an open one (spec 0008 AC-2).
+   *
+   * @param {string} sessionId
+   * @returns {Promise<{isSecured: boolean, whoCanJoin: string, status: string|null, resolved: boolean, sessionType: 'public'|'secured'|null}>}
+   */
+  async function resolveSessionAccess(sessionId) {
+    if (!sessionId || typeof sessionId !== 'string') {
+      return { isSecured: true, whoCanJoin: 'public', status: null, resolved: false, sessionType: null };
+    }
+
+    const state = actualStore.getState();
+    const currentSession = state?.getIn ? state.getIn(['sessions', sessionId]) : null;
+    let sessionDoc = null;
+    if (isConnected()) {
+      try {
+        sessionDoc = await Session.findOne({ sessionId }).lean();
+      } catch {
+        // DB lookup best effort
+      }
+    }
+
+    const resolved = Boolean(currentSession || sessionDoc);
+    const sessionType = deriveSessionType({
+      type: (currentSession && currentSession.get('type')) || (sessionDoc && sessionDoc.type) || null,
+      sessionType: (currentSession && currentSession.get('sessionType')) || null,
+      whoCanJoin: (currentSession && currentSession.get('whoCanJoin')) || (sessionDoc && sessionDoc.whoCanJoin) || null,
+      resolved
+    });
+    const whoCanJoin = (currentSession && currentSession.get('whoCanJoin')) || (sessionDoc && sessionDoc.whoCanJoin) || (sessionType === 'secured' ? 'allowlist' : 'public');
+    const status = (currentSession && currentSession.get('status')) || (sessionDoc && sessionDoc.status) || null;
+    return { isSecured: sessionType !== 'public', whoCanJoin, status, resolved, sessionType };
+  }
+
+  /**
+   * The single eligibility gate for joining a secured session (AC-4, AC-5).
+   * Shared by POST /api/sessions/:sessionId/join and the `join_session` socket
+   * event so the two entry points cannot drift apart: without it the socket
+   * path registered any caller straight past the allowlist and the queue.
+   *
+   * Resolves `{ ok: true, user }` when the voter may join. Otherwise resolves
+   * `{ ok: false, statusCode, message, error?, status?, requestId? }` for the
+   * caller to translate into its own response shape.
+   *
+   * @param {Object} params
+   * @param {string} params.sessionId
+   * @param {string} params.whoCanJoin
+   * @param {string|null} params.status Session status; anything but 'pending' means Start has locked the roster
+   * @param {string|null} params.userId Server derived identity, never a client claim
+   * @param {string} [params.displayName]
+   * @param {Object|null} [params.user] Already loaded user, to skip a second lookup
+   * @returns {Promise<Object>} eligibility decision
+   */
+  async function evaluateSecuredEligibility({ sessionId, whoCanJoin, status = null, userId, displayName = '', user = null }) {
+    if (!userId) {
+      return { ok: false, statusCode: 401, error: 'AUTHENTICATION_REQUIRED', message: 'Sign in to join this secured session.' };
+    }
+
+    let signedInUser = user;
+    if (!signedInUser) {
+      try {
+        signedInUser = await User.findById(userId);
+      } catch (err) {
+        console.error('[Server] User lookup error during secured join:', err.message);
+      }
+    }
+    if (!signedInUser) {
+      return { ok: false, statusCode: 401, error: 'USER_NOT_FOUND', message: 'Voter account not found' };
+    }
+
+    const userEmail = String(signedInUser.email || '').toLowerCase().trim();
+    const rosterLocked = Boolean(status) && status !== 'pending';
+
+    // AC-8: the roster locks at Start, so no new voter may join. A voter who
+    // already holds a token for this session may rejoin, otherwise clearing
+    // browser storage mid session would lock out a legitimate participant.
+    if (rosterLocked && !validateVoterToken(`user:${userId}`, sessionId).valid) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'SESSION_STARTED',
+        message: 'This session has already started, so new joins are closed.'
+      };
+    }
+
+    if (whoCanJoin === 'allowlist') {
+      const allowEntry = isConnected()
+        ? await SessionAllowlistEntry.findOne({ sessionId, email: userEmail })
+        : null;
+      if (!allowEntry) {
+        return { ok: false, statusCode: 403, error: 'NOT_ON_ALLOWLIST', message: 'You are not on the allowlist for this session.' };
+      }
+      return { ok: true, user: signedInUser };
+    }
+
+    if (whoCanJoin === 'approval') {
+      const existingRequest = isConnected()
+        ? await SessionJoinRequest.findOne({ sessionId, userId: signedInUser._id })
+        : null;
+
+      if (!existingRequest) {
+        // AC-8 also closes the request queue at Start: a voter without a
+        // decision on file can no longer create one.
+        if (rosterLocked) {
+          return {
+            ok: false,
+            statusCode: 409,
+            error: 'SESSION_STARTED',
+            message: 'This session has already started, so new join requests are closed.'
+          };
+        }
+        let newDoc = null;
+        if (isConnected()) {
+          newDoc = await SessionJoinRequest.create({
+            sessionId,
+            userId: signedInUser._id,
+            email: userEmail,
+            displayName: displayName || signedInUser.name,
+            status: 'pending'
+          });
+          if (io) {
+            await emitSessionParticipants(sessionId, io.to(`participants:${sessionId}`));
+          }
+        }
+        return {
+          ok: false,
+          statusCode: 202,
+          status: 'pending_approval',
+          requestId: newDoc ? String(newDoc._id) : undefined,
+          message: 'Join request awaiting admin approval'
+        };
+      }
+
+      if (existingRequest.status === 'pending') {
+        return {
+          ok: false,
+          statusCode: 202,
+          status: 'pending_approval',
+          requestId: String(existingRequest._id),
+          message: 'Join request awaiting admin approval'
+        };
+      }
+
+      if (existingRequest.status === 'rejected') {
+        return { ok: false, statusCode: 403, error: 'REQUEST_REJECTED', message: 'Your join request was rejected.' };
+      }
+
+      return { ok: true, user: signedInUser };
+    }
+
+    // A secured session whose mode is unusable must deny, never fall through:
+    // falling through would let anyone past the gate on a legacy document.
+    console.error(`[Server] Secured session ${sessionId} has unusable whoCanJoin "${whoCanJoin}", refusing join.`);
+    return { ok: false, statusCode: 403, error: 'NOT_ELIGIBLE', message: 'This session is not accepting joins right now.' };
+  }
+
+  /**
+   * Shapes an eligibility decision into an HTTP body or a socket ack body.
+   *
+   * @param {Object} result Return value of evaluateSecuredEligibility
+   * @returns {Object} response payload
+   */
+  function securedDecisionBody(decision) {
+    const body = { success: decision.statusCode === 202, message: decision.message };
+    if (decision.error) body.error = decision.error;
+    if (decision.status) body.status = decision.status;
+    if (decision.requestId) body.requestId = decision.requestId;
+    return body;
+  }
+
+  /**
+   * Reads a voter's email from the User collection, lowercased to match the
+   * allowlist. Returns an empty string when the account cannot be read, which
+   * the eligibility check treats as ineligible rather than as a pass.
+   *
+   * @param {string} userId
+   * @returns {Promise<string>}
+   */
+  async function resolveVoterEmail(userId) {
+    if (!userId || !isConnected()) return '';
+    try {
+      const user = await User.findById(userId).lean();
+      return String(user?.email || '').toLowerCase().trim();
+    } catch (err) {
+      console.error('[Server] Voter email lookup failed during vote eligibility check:', err.message);
+      return '';
+    }
+  }
+
+  /**
+   * Re-checks a signed in voter's standing in a secured session at vote time.
+   * Allowlist mode requires a live allowlist row; approval mode requires an
+   * approved request. Anything else, including an unreadable database, is
+   * ineligible so the check fails closed.
+   *
+   * @param {Object} params
+   * @param {string} params.sessionId
+   * @param {string} params.whoCanJoin
+   * @param {string} params.userId
+   * @param {string} params.email Lowercased email, possibly empty
+   * @returns {Promise<boolean>}
+   */
+  async function isVoterStillEligible({ sessionId, whoCanJoin, userId, email }) {
+    if (!isConnected() || !userId || !email) return false;
+
+    if (whoCanJoin === 'allowlist') {
+      const entry = await SessionAllowlistEntry.findOne({ sessionId, email }).lean();
+      return Boolean(entry);
+    }
+
+    if (whoCanJoin === 'approval') {
+      const request = await SessionJoinRequest.findOne({ sessionId, userId }).lean();
+      return Boolean(request) && request.status === 'approved';
+    }
+
+    // A secured session with an unusable mode never grants a vote.
+    console.error(`[Server] Secured session ${sessionId} has unusable whoCanJoin "${whoCanJoin}", refusing vote.`);
+    return false;
+  }
+
+  /**
+   * Revokes one signed in voter's token and drops their socket. This is what
+   * every removal path means: REMOVE_PARTICIPANT in the lobby, a deferred
+   * removal at NEXT, and an allowlist paste that drops a joined email.
+   *
+   * Revoking the token, not just the session headcount entry, is the part that
+   * matters. A token left in votersByToken still passes validateVoterToken
+   * through the `voter.sessionId === normSession` shortcut, so a removed voter
+   * would keep casting counted ballots while the admin's roster showed them
+   * gone. AC-7 also promises the socket is disconnected.
+   *
+   * @param {string} sessionId - Session the voter is being removed from.
+   * @param {string} userId - Server derived identity, never a client claim.
+   * @param {string} message - Message sent with the participant_status event.
+   * @returns {boolean} true when a token was revoked.
+   */
+  function revokeAndDisconnectVoter(sessionId, userId, message) {
+    if (!sessionId || !userId) return false;
+    const revoked = revokeSessionVoter(sessionId, userId);
+    const targetToken = `user:${userId}`;
+    const sockets = io?.sockets?.sockets;
+
+    if (sockets) {
+      for (const s of sockets.values()) {
+        const sVoter = socketToVoter.get(s.id);
+        const isTarget = String(s.data?.userId) === String(userId) || sVoter?.voterToken === targetToken;
+        if (!isTarget) continue;
+
+        s.emit('participant_status', { sessionId, status: 'removed', message });
+        if (sVoter) {
+          socketToVoter.delete(s.id);
+          actualStore.dispatch({
+            type: 'RECORD_PRESENCE_DISCONNECT',
+            sessionId,
+            voterToken: sVoter.voterToken,
+            socketId: s.id,
+            timestamp: Date.now()
+          });
+        }
+        s.leave(`session:${sessionId}`);
+        s.disconnect(true);
+      }
+    }
+
+    return revoked;
+  }
+
+  /**
+   * Builds the per round turnout for a session (spec 0008 AC-7): every round in
+   * ascending roundIndex order, each listing the signed in voters who voted
+   * (display name and email), with an empty list when nobody voted. Reads the
+   * persisted VoteParticipation audit trail, which stores no vote choice. Round
+   * identity comes from the live store rounds and the round manager while the
+   * session runs, and from the persisted Result.rounds once it is completed.
+   *
+   * @param {string} sessionId
+   * @returns {Promise<Array<{ roundIndex: number, roundId: string, voters: Array<{ name: string, email: string }> }>|null>} null when the session is unknown
+   */
+  async function buildSessionTurnout(sessionId) {
+    if (!sessionId || typeof sessionId !== 'string') return null;
+    const cleanSessionId = sessionId.trim();
+    const state = actualStore.getState();
+    const session = state && typeof state.get === 'function'
+      ? state.getIn(['sessions', cleanSessionId])
+      : null;
+
+    let exists = Boolean(session);
+    if (!exists && isConnected()) {
+      try {
+        const doc = await Session.findOne({ sessionId: cleanSessionId }).lean();
+        exists = Boolean(doc);
+      } catch (err) {
+        console.error('[Turnout] Session lookup error:', err.message);
+      }
+    }
+    if (!exists) return null;
+
+    const roundIndexes = new Set();
+
+    if (session) {
+      const rawRounds = session.get('rounds');
+      const rounds = rawRounds && typeof rawRounds.toJS === 'function'
+        ? rawRounds.toJS()
+        : (Array.isArray(rawRounds) ? rawRounds : []);
+      for (const r of rounds) {
+        if (r && typeof r.roundIndex === 'number') roundIndexes.add(r.roundIndex);
+      }
+    }
+
+    const active = roundManager.getCurrentRound(cleanSessionId, actualStore);
+    if (active && typeof active.roundIndex === 'number') roundIndexes.add(active.roundIndex);
+
+    if (isConnected()) {
+      try {
+        const resultDoc = await repository.getResultBySessionId(cleanSessionId);
+        if (resultDoc && Array.isArray(resultDoc.rounds)) {
+          for (const r of resultDoc.rounds) {
+            if (r && typeof r.roundIndex === 'number') roundIndexes.add(r.roundIndex);
+          }
+        }
+      } catch (err) {
+        console.error('[Turnout] Result lookup error:', err.message);
+      }
+    }
+
+    const ordered = [...roundIndexes].sort((a, b) => a - b);
+    if (ordered.length === 0) return [];
+
+    const byRound = new Map();
+    for (const idx of ordered) {
+      const roundId = `${cleanSessionId}:::r${idx}`;
+      byRound.set(roundId, { roundIndex: idx, roundId, voters: [] });
+    }
+    const roundIds = [...byRound.keys()];
+
+    if (isConnected()) {
+      try {
+        const participations = await VoteParticipation.find({
+          sessionId: cleanSessionId,
+          roundId: { $in: roundIds }
+        }).lean();
+        const userIds = [...new Set(participations.map((p) => String(p.userId)).filter(Boolean))];
+        let usersById = new Map();
+        if (userIds.length > 0) {
+          const users = await User.find({ _id: { $in: userIds } }).lean();
+          usersById = new Map(users.map((u) => [String(u._id), u]));
+        }
+        for (const p of participations) {
+          const bucket = byRound.get(p.roundId);
+          if (!bucket) continue;
+          const user = usersById.get(String(p.userId));
+          bucket.voters.push({
+            name: (user && user.name) || '',
+            email: (user && user.email) || ''
+          });
+        }
+        for (const bucket of byRound.values()) {
+          bucket.voters.sort((a, b) => a.email.localeCompare(b.email));
+        }
+      } catch (err) {
+        console.error('[Turnout] Participation lookup error:', err.message);
+      }
+    }
+
+    return ordered.map((idx) => byRound.get(`${cleanSessionId}:::r${idx}`));
+  }
+
+  /**
+   * Emits `session_turnout` to the admin turnout room for a session (spec 0008
+   * AC-7). Fire and forget: called once on subscribe and after each round closes.
+   * Skips the DB reads entirely when no admin holds the room.
+   *
+   * @param {string} sessionId
+   */
+  async function emitSessionTurnout(sessionId) {
+    if (!io || !sessionId) return;
+    try {
+      const room = io.sockets?.adapter?.rooms?.get(`turnout:${sessionId}`);
+      if (!room || room.size === 0) return;
+    } catch {
+      // adapter internals unavailable; fall through and emit anyway
+    }
+    try {
+      const rounds = await buildSessionTurnout(sessionId);
+      if (rounds === null) return;
+      io.to(`turnout:${sessionId}`).emit('session_turnout', { sessionId, rounds });
+    } catch (err) {
+      console.error('[Turnout] Emit error:', err.message);
+    }
+  }
+
   // Create native HTTP server for REST endpoints
   const httpServer = http.createServer(async (req, res) => {
     try {
@@ -714,6 +1357,12 @@ export default function startServer(store, port = 8090) {
 
       // 2a. POST /api/auth/otp/request (AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-14)
       if (pathname === '/api/auth/otp/request' && req.method === 'POST') {
+        // Every reply on this route goes through `respond`, which holds the
+        // response open until the timing floor elapses. The body is already
+        // generic for a registered and an unregistered address; without the
+        // floor the clock still answers the question the body refuses to.
+        const startedAt = Date.now();
+        const respond = createPacedResponder(res, startedAt);
         try {
           const body = await readJsonBody(req);
           const email = body.email;
@@ -721,7 +1370,7 @@ export default function startServer(store, port = 8090) {
           const username = body.username;
 
           if (!isValidEmail(email)) {
-            sendJson(res, 400, {
+            await respond(400, {
               success: false,
               error: 'INVALID_EMAIL',
               message: 'A valid email address is required.'
@@ -729,10 +1378,27 @@ export default function startServer(store, port = 8090) {
             return;
           }
 
+          // Hardening: 5 requests per hour per email address and 20 per hour
+          // per client address, checked before any database work or email send
+          // so an exhausted caller costs nothing.
+          const normalizedEmail = String(email).trim().toLowerCase();
+          const clientIp = resolveClientIp(req.headers, req.socket && req.socket.remoteAddress);
+          const rateLimit = checkOtpRequestRateLimit({ email: normalizedEmail, clientIp });
+          if (!rateLimit.allowed) {
+            const retryAfterSeconds = Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000));
+            await respond(429, {
+              success: false,
+              error: 'RATE_LIMITED',
+              message: 'Too many code requests. Please wait before trying again.',
+              retryAfterSeconds
+            }, { 'Retry-After': String(retryAfterSeconds) });
+            return;
+          }
+
           const challengeResult = await createChallenge({ email, name, username });
           if (!challengeResult.success) {
             if (challengeResult.error === 'COOLDOWN_ACTIVE') {
-              sendJson(res, 429, {
+              await respond(429, {
                 success: false,
                 error: challengeResult.error,
                 message: challengeResult.message,
@@ -741,14 +1407,14 @@ export default function startServer(store, port = 8090) {
               return;
             }
             if (challengeResult.error === 'USERNAME_TAKEN' || challengeResult.error === 'INVALID_USERNAME') {
-              sendJson(res, 400, {
+              await respond(400, {
                 success: false,
                 error: challengeResult.error,
                 message: challengeResult.message
               });
               return;
             }
-            sendJson(res, 400, {
+            await respond(400, {
               success: false,
               error: challengeResult.error || 'BAD_REQUEST',
               message: challengeResult.message || 'Unable to request code.'
@@ -762,7 +1428,7 @@ export default function startServer(store, port = 8090) {
             if (challengeResult.challengeId) {
               await cancelChallenge(challengeResult.challengeId);
             }
-            sendJson(res, 502, {
+            await respond(502, {
               success: false,
               error: 'EMAIL_DELIVERY_FAILED',
               message: 'Failed to deliver verification code email. Please try again later.'
@@ -772,13 +1438,13 @@ export default function startServer(store, port = 8090) {
 
           // AC-5: Response is always generic and never reveals whether email is registered
           // AC-6: OTP never appears in response body
-          sendJson(res, 200, {
+          await respond(200, {
             success: true,
             message: 'If an account exists or can be created, a code was sent.'
           });
         } catch (err) {
           console.error('[Auth API] OTP request error:', err.message || err);
-          sendJson(res, 500, {
+          await respond(500, {
             success: false,
             error: 'INTERNAL_SERVER_ERROR',
             message: 'An unexpected error occurred while processing your request.'
@@ -1034,25 +1700,16 @@ export default function startServer(store, port = 8090) {
         let displayName = body.displayName;
 
         // Check session type and whoCanJoin mode
-        const state = actualStore.getState();
-        const currentSession = state?.getIn ? state.getIn(['sessions', sessionId]) : null;
-        let sessionDoc = null;
-        if (isConnected()) {
-          try {
-            sessionDoc = await Session.findOne({ sessionId }).lean();
-          } catch {
-            // DB lookup best effort
-          }
-        }
-        const isSecured = (currentSession && currentSession.get('type') === 'secured') || (sessionDoc && sessionDoc.type === 'secured');
-        const whoCanJoin = (currentSession && currentSession.get('whoCanJoin')) || (sessionDoc && sessionDoc.whoCanJoin) || 'public';
+        const { isSecured, whoCanJoin, status: sessionStatus } = await resolveSessionAccess(sessionId);
 
         // AC-12: Check if voter has signed in vs_voter cookie
         const vsVoterToken = getVoterTokenFromRequest(req);
         let signedInUser = null;
+        let signedInUserId = null;
         if (vsVoterToken) {
           const voterAuth = verifyVoterToken(vsVoterToken);
           if (voterAuth.valid && voterAuth.payload?.userId) {
+            signedInUserId = voterAuth.payload.userId;
             try {
               signedInUser = await User.findById(voterAuth.payload.userId);
             } catch (err) {
@@ -1061,106 +1718,23 @@ export default function startServer(store, port = 8090) {
           }
         }
 
-        // AC-4 & AC-5: Secured session eligibility gating
+        // AC-4 & AC-5: Secured session eligibility gating. This runs through
+        // the same helper as the join_session socket event, so the REST and
+        // socket entry points cannot drift apart.
         if (isSecured) {
-          if (!vsVoterToken) {
-            sendJson(res, 401, {
-              success: false,
-              error: 'AUTHENTICATION_REQUIRED',
-              message: 'Sign in to join this secured session.'
-            });
+          const decision = await evaluateSecuredEligibility({
+            sessionId,
+            whoCanJoin,
+            status: sessionStatus,
+            userId: signedInUserId,
+            displayName,
+            user: signedInUser
+          });
+          if (!decision.ok) {
+            sendJson(res, decision.statusCode, securedDecisionBody(decision));
             return;
           }
-
-          const voterAuth = verifyVoterToken(vsVoterToken);
-          if (!voterAuth.valid || !voterAuth.payload?.userId) {
-            sendJson(res, 401, {
-              success: false,
-              error: 'AUTHENTICATION_REQUIRED',
-              message: 'Sign in to join this secured session.'
-            });
-            return;
-          }
-
-          if (!signedInUser && isConnected()) {
-            try {
-              signedInUser = await User.findById(voterAuth.payload.userId);
-            } catch (err) {
-              console.error('[Server] User lookup error during secured join:', err.message);
-            }
-          }
-
-          if (!signedInUser) {
-            sendJson(res, 401, {
-              success: false,
-              error: 'USER_NOT_FOUND',
-              message: 'Voter account not found'
-            });
-            return;
-          }
-
-          const userEmail = signedInUser.email.toLowerCase().trim();
-
-          if (whoCanJoin === 'allowlist') {
-            const allowEntry = isConnected()
-              ? await SessionAllowlistEntry.findOne({ sessionId, email: userEmail })
-              : null;
-            if (!allowEntry) {
-              sendJson(res, 403, {
-                success: false,
-                error: 'NOT_ON_ALLOWLIST',
-                message: 'You are not on the allowlist for this session.'
-              });
-              return;
-            }
-          } else if (whoCanJoin === 'approval') {
-            const existingRequest = isConnected()
-              ? await SessionJoinRequest.findOne({ sessionId, userId: signedInUser._id })
-              : null;
-
-            if (!existingRequest) {
-              let newDoc = null;
-              if (isConnected()) {
-                newDoc = await SessionJoinRequest.create({
-                  sessionId,
-                  userId: signedInUser._id,
-                  email: userEmail,
-                  displayName: displayName || signedInUser.name,
-                  status: 'pending'
-                });
-                if (io) {
-                  await emitSessionParticipants(sessionId, io.to(`participants:${sessionId}`));
-                }
-              }
-              sendJson(res, 202, {
-                success: true,
-                status: 'pending_approval',
-                requestId: newDoc ? String(newDoc._id) : undefined,
-                message: 'Join request awaiting admin approval'
-              });
-              return;
-            }
-
-            if (existingRequest.status === 'pending') {
-              sendJson(res, 202, {
-                success: true,
-                status: 'pending_approval',
-                requestId: String(existingRequest._id),
-                message: 'Join request awaiting admin approval'
-              });
-              return;
-            }
-
-            if (existingRequest.status === 'rejected') {
-              sendJson(res, 403, {
-                success: false,
-                error: 'REQUEST_REJECTED',
-                message: 'Your join request was rejected.'
-              });
-              return;
-            }
-            // If approved, proceed to registerVoter below
-          }
+          signedInUser = decision.user;
         }
 
         let displayNameSource = 'anonymous';
@@ -1231,9 +1805,15 @@ export default function startServer(store, port = 8090) {
       // 3b. GET /api/join/:code (Join Code Resolver with rate limiting)
       const joinCodeMatch = pathname.match(/^\/api\/join\/([^/?]+)$/);
       if (joinCodeMatch && req.method === 'GET') {
+        // The resolver answers a question about a secret: whether a code exists.
+        // Its bodies are already identical for a hit and a miss, so every reply
+        // goes through `respond`, which holds the response open until the timing
+        // floor elapses and buries the database spread under a constant.
+        const startedAt = Date.now();
+        const respond = createPacedResponder(res, startedAt);
         const clientIp = resolveClientIp(req.headers, req.socket && req.socket.remoteAddress);
         if (!checkJoinRateLimit(clientIp)) {
-          sendJson(res, 429, { error: 'Too many requests, please wait.' });
+          await respond(429, { error: 'Too many requests, please wait.' });
           return;
         }
 
@@ -1241,12 +1821,12 @@ export default function startServer(store, port = 8090) {
         const normalizedCode = rawCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
         if (normalizedCode.length !== 6) {
-          sendJson(res, 404, { error: 'Code not found or no longer active.' });
+          await respond(404, { error: 'Code not found or no longer active.' });
           return;
         }
 
         if (!isConnected()) {
-          sendJson(res, 503, { error: 'Service temporarily unavailable.' });
+          await respond(503, { error: 'Service temporarily unavailable.' });
           return;
         }
 
@@ -1256,37 +1836,48 @@ export default function startServer(store, port = 8090) {
           }).lean();
 
           if (!sessionDoc) {
-            sendJson(res, 404, { error: 'Code not found or no longer active.' });
+            await respond(404, { error: 'Code not found or no longer active.' });
             return;
           }
 
           if (sessionDoc.status !== 'pending' && sessionDoc.status !== 'open') {
-            sendJson(res, 404, { error: 'Code not found or no longer active.' });
+            await respond(404, { error: 'Code not found or no longer active.' });
             return;
           }
 
           if (sessionDoc.pendingExpiresAt && new Date(sessionDoc.pendingExpiresAt).getTime() <= Date.now()) {
-            sendJson(res, 404, { error: 'Code not found or no longer active.' });
+            await respond(404, { error: 'Code not found or no longer active.' });
             return;
           }
 
-          sendJson(res, 200, {
+          await respond(200, {
             sessionId: sessionDoc.sessionId,
             name: sessionDoc.title || '',
             status: sessionDoc.status,
-            sessionType: sessionDoc.type || 'public',
+            sessionType: deriveSessionType({
+              type: sessionDoc.type,
+              sessionType: sessionDoc.sessionType,
+              whoCanJoin: sessionDoc.whoCanJoin,
+              resolved: true
+            }),
             votingMode: sessionDoc.votingMode || 'tournament'
           });
           return;
         } catch (err) {
-          sendJson(res, 503, { error: 'Service temporarily unavailable.' });
+          await respond(503, { error: 'Service temporarily unavailable.' });
           return;
         }
       }
 
       // 4. GET /api/sessions (Session Discovery)
       if (pathname === '/api/sessions' && req.method === 'GET') {
-        const summaries = getSessionsSummary(actualStore.getState());
+        // Same visibility rule as the socket broadcast: an anonymous caller
+        // must not be able to enumerate secured sessions and their join codes.
+        // The admin panel reads the socket registry, not this endpoint.
+        const authHeader = req.headers.authorization || '';
+        const adminTokenCandidate = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+        const isAdminRequest = Boolean(adminTokenCandidate) && verifyAdminToken(adminTokenCandidate).valid;
+        const summaries = filterSessionsForCaller(getSessionsSummary(actualStore.getState()), isAdminRequest);
         sendJson(res, 200, {
           success: true,
           sessions: summaries,
@@ -1299,6 +1890,26 @@ export default function startServer(store, port = 8090) {
       const lobbyMatch = pathname.match(/^\/api\/sessions\/([^/?]+)\/lobby$/);
       if (lobbyMatch && req.method === 'GET') {
         const sessionId = decodeURIComponent(lobbyMatch[1]);
+
+        // The single unknown session body for this route. A gated secured
+        // session answers through this same helper, so the bytes an outsider
+        // receives are byte identical to the bytes an unknown id receives and
+        // the two branches cannot drift apart (spec 0008 AC-14).
+        //
+        // The message deliberately does not interpolate the session id. It did
+        // before, which meant an unknown id answered `Session "a" was not
+        // found.` while a gated secured session answered `Session "b" was not
+        // found.`, so the two bodies could only ever be byte identical for a
+        // single id. Echoing the id back is also a needless disclosure surface
+        // for a route whose whole purpose is to confirm nothing.
+        const sendUnknownSession = () => {
+          sendJson(res, 404, {
+            success: false,
+            error: 'SESSION_NOT_FOUND',
+            message: 'Session was not found.'
+          });
+        };
+
         const state = actualStore.getState();
         const sessions = state && typeof state.get === 'function' ? state.get('sessions') : null;
         const session = sessions ? sessions.get(sessionId) : null;
@@ -1316,8 +1927,37 @@ export default function startServer(store, port = 8090) {
           const voterCount = getVoterCount(sessionId);
           const winner = session.get('winner') || null;
 
-          const sessionType = session.get('type') || session.get('sessionType') || 'open';
+          const sessionType = deriveSessionType({
+            type: session.get('type'),
+            sessionType: session.get('sessionType'),
+            whoCanJoin: session.get('whoCanJoin'),
+            resolved: true
+          });
           const whoCanJoin = session.get('whoCanJoin') || (sessionType === 'secured' ? 'allowlist' : 'public');
+
+          // Spec 0008 AC-14: a secured lobby read runs the shared visibility
+          // resolver before any of the metadata is served. A caller who may
+          // not read it gets the unknown session 404, not a 200 with a
+          // reduced body, so holding a session id cannot confirm the session
+          // exists. This replaces the earlier AC-2 winner field gate, which
+          // nulled the winner but still leaked the title, status, whoCanJoin,
+          // entry count and voter count. A public session short circuits here
+          // and never reaches the resolver.
+          if (sessionType === 'secured') {
+            const lobbyVisibility = await resolveResultVisibility({
+              result: {
+                sessionId,
+                type: 'secured',
+                publishResultsPublicly: session.get('publishResultsPublicly') === true
+              },
+              adminToken: getAdminTokenFromRequest(req),
+              voterCookie: getVoterTokenFromRequest(req)
+            });
+            if (!lobbyVisibility.visible) {
+              sendUnknownSession();
+              return;
+            }
+          }
 
           const lobbyData = {
             sessionId,
@@ -1346,8 +1986,32 @@ export default function startServer(store, port = 8090) {
           try {
             const dbSession = await repository.getSessionBySessionId(sessionId);
             if (dbSession) {
-              const sessionType = dbSession.type || dbSession.sessionType || 'open';
+              const sessionType = deriveSessionType({
+                type: dbSession.type,
+                sessionType: dbSession.sessionType,
+                whoCanJoin: dbSession.whoCanJoin,
+                resolved: true
+              });
               const whoCanJoin = dbSession.whoCanJoin || (sessionType === 'secured' ? 'allowlist' : 'public');
+              const dbWinner = dbSession.winner || null;
+              // Spec 0008 AC-14: the same read gate as the in memory path, so an
+              // archived secured session held only in MongoDB cannot be probed
+              // for existence either.
+              if (sessionType === 'secured') {
+                const dbLobbyVisibility = await resolveResultVisibility({
+                  result: {
+                    sessionId,
+                    type: 'secured',
+                    publishResultsPublicly: dbSession.publishResultsPublicly === true
+                  },
+                  adminToken: getAdminTokenFromRequest(req),
+                  voterCookie: getVoterTokenFromRequest(req)
+                });
+                if (!dbLobbyVisibility.visible) {
+                  sendUnknownSession();
+                  return;
+                }
+              }
               const lobbyData = {
                 sessionId: dbSession.sessionId,
                 title: dbSession.title || '',
@@ -1357,7 +2021,7 @@ export default function startServer(store, port = 8090) {
                 whoCanJoin,
                 entryCount: Array.isArray(dbSession.entries) ? dbSession.entries.length : 0,
                 voterCount: getVoterCount(sessionId),
-                winner: dbSession.winner || null,
+                winner: dbWinner,
                 votingStarted: dbSession.status === 'open' || dbSession.status === 'completed',
                 isArchived: dbSession.status === 'archived'
               };
@@ -1373,11 +2037,7 @@ export default function startServer(store, port = 8090) {
           }
         }
 
-        sendJson(res, 404, {
-          success: false,
-          error: 'SESSION_NOT_FOUND',
-          message: `Session "${sessionId}" was not found.`
-        });
+        sendUnknownSession();
         return;
       }
 
@@ -1395,12 +2055,19 @@ export default function startServer(store, port = 8090) {
         try {
           const limit = url.searchParams.get('limit') || 50;
           const results = await repository.getCompletedResults(limit);
+          // Spec 0008 AC-9: the archive carries the session type, so an admin
+          // can tell a published secured result from a public one in the
+          // listing instead of only on the result page. The filter above only
+          // admits `type: 'public'` or a published secured row, so a legacy row
+          // that never got backfilled stays out of the archive rather than
+          // showing up with a type nobody can trust.
           const formattedResults = results.map(r => ({
             sessionId: r.sessionId,
             title: r.title || '',
             winner: r.winner,
             entries: r.entries,
-            completedAt: r.completedAt
+            completedAt: r.completedAt,
+            type: r.type === 'secured' ? 'secured' : 'public'
           }));
 
           sendJson(res, 200, {
@@ -1443,12 +2110,34 @@ export default function startServer(store, port = 8090) {
             return;
           }
 
+          // Spec 0008 AC-2, AC-4, AC-6: a secured result is readable only by its
+          // approved participants, the admin, or anyone once published. A denied
+          // caller gets the same 404 as a missing result, so existence is not
+          // disclosed.
+          const access = await resolveSessionAccess(sessionId);
+          const visibility = await resolveResultVisibility({
+            result: resultDoc,
+            sessionType: access.sessionType,
+            adminToken: getAdminTokenFromRequest(req),
+            voterCookie: getVoterTokenFromRequest(req)
+          });
+          if (!visibility.visible) {
+            sendJson(res, 404, {
+              success: false,
+              error: 'RESULT_NOT_FOUND',
+              message: `No completed result found for session "${sessionId}"`
+            });
+            return;
+          }
+
           const resultPayload = {
             sessionId: resultDoc.sessionId,
             title: resultDoc.title || '',
             winner: resultDoc.winner,
             entries: resultDoc.entries,
-            completedAt: resultDoc.completedAt
+            completedAt: resultDoc.completedAt,
+            type: visibility.type,
+            publishResultsPublicly: resultDoc.publishResultsPublicly === true
           };
           if (resultDoc.rounds && resultDoc.rounds.length > 0) {
             resultPayload.rounds = resultDoc.rounds;
@@ -1476,6 +2165,31 @@ export default function startServer(store, port = 8090) {
         const state = actualStore.getState();
         const session = state && typeof state.get === 'function' ? state.getIn(['sessions', sessionId]) : null;
         if (session) {
+          // Spec 0008 AC-6: a secured session still in progress is readable only
+          // by its approved participants and the admin, matching the socket room
+          // gate. Outsiders get the same 404 a missing result returns.
+          const liveVisibility = await resolveResultVisibility({
+            result: {
+              sessionId,
+              type: deriveSessionType({
+                type: session.get('type'),
+                sessionType: session.get('sessionType'),
+                whoCanJoin: session.get('whoCanJoin'),
+                resolved: true
+              }),
+              publishResultsPublicly: session.get('publishResultsPublicly') === true
+            },
+            adminToken: getAdminTokenFromRequest(req),
+            voterCookie: getVoterTokenFromRequest(req)
+          });
+          if (!liveVisibility.visible) {
+            sendJson(res, 404, {
+              success: false,
+              error: 'RESULT_NOT_FOUND',
+              message: `No result found for session "${sessionId}"`
+            });
+            return;
+          }
           const rawRounds = session.get('rounds');
           const rounds = rawRounds && typeof rawRounds.toJS === 'function'
             ? rawRounds.toJS()
@@ -1517,6 +2231,23 @@ export default function startServer(store, port = 8090) {
             return;
           }
 
+          // Spec 0008 AC-2: same visibility gate as the result read.
+          const roundsAccess = await resolveSessionAccess(sessionId);
+          const dbVisibility = await resolveResultVisibility({
+            result: resultDoc,
+            sessionType: roundsAccess.sessionType,
+            adminToken: getAdminTokenFromRequest(req),
+            voterCookie: getVoterTokenFromRequest(req)
+          });
+          if (!dbVisibility.visible) {
+            sendJson(res, 404, {
+              success: false,
+              error: 'RESULT_NOT_FOUND',
+              message: `No result found for session "${sessionId}"`
+            });
+            return;
+          }
+
           sendJson(res, 200, {
             success: true,
             sessionId,
@@ -1528,6 +2259,53 @@ export default function startServer(store, port = 8090) {
             success: false,
             error: 'DATABASE_ERROR',
             message: 'Failed to retrieve rounds for session'
+          });
+        }
+        return;
+      }
+
+      // 7. GET /api/sessions/:sessionId/turnout (admin only, spec 0008 AC-7)
+      const sessionTurnoutMatch = pathname.match(/^\/api\/sessions\/([^/?]+)\/turnout$/);
+      if (sessionTurnoutMatch && req.method === 'GET') {
+        const adminTokenCandidate = getAdminTokenFromRequest(req);
+        // Spec 0008 AC-8: a non admin caller receives the same 404 as an unknown
+        // endpoint, so the admin only surface is not advertised.
+        if (!(adminTokenCandidate && verifyAdminToken(adminTokenCandidate).valid)) {
+          sendJson(res, 404, {
+            success: false,
+            error: 'NOT_FOUND',
+            message: 'Endpoint not found'
+          });
+          return;
+        }
+
+        if (!isConnected()) {
+          sendJson(res, 500, {
+            success: false,
+            error: 'DATABASE_ERROR',
+            message: 'Database connection is unavailable'
+          });
+          return;
+        }
+
+        const sessionId = decodeURIComponent(sessionTurnoutMatch[1]);
+        try {
+          const rounds = await buildSessionTurnout(sessionId);
+          if (rounds === null) {
+            sendJson(res, 404, {
+              success: false,
+              error: 'SESSION_NOT_FOUND',
+              message: `Session "${sessionId}" was not found.`
+            });
+            return;
+          }
+          sendJson(res, 200, { success: true, sessionId, rounds });
+        } catch (dbErr) {
+          console.error('[Server] Turnout query error:', dbErr.message);
+          sendJson(res, 500, {
+            success: false,
+            error: 'DATABASE_ERROR',
+            message: 'Failed to retrieve turnout for session'
           });
         }
         return;
@@ -1599,6 +2377,19 @@ export default function startServer(store, port = 8090) {
           if (JSON.stringify(prevSerialized) !== JSON.stringify(currSerialized)) {
             io.to(`session:${sessionId}`).emit('session_state', currSerialized);
           }
+
+          // Spec 0008 AC-7: a closed round grows the round list. Emit a fresh
+          // turnout snapshot to the admin room so a new round appears live.
+          const prevRounds = prevSession && typeof prevSession.get === 'function'
+            ? prevSession.get('rounds')
+            : null;
+          const currRounds = session.get('rounds');
+          const roundsLength = (v) => v && typeof v.size === 'number'
+            ? v.size
+            : (Array.isArray(v) ? v.length : 0);
+          if (roundsLength(currRounds) > roundsLength(prevRounds)) {
+            emitSessionTurnout(sessionId);
+          }
         }
       });
 
@@ -1628,6 +2419,10 @@ export default function startServer(store, port = 8090) {
           : false;
         const isTerminal = Boolean(session.get('winner')) || status === 'completed' || status === 'archived';
         if (isTerminal && !wasTerminal) {
+          // A terminal session can never run another round, so any deferred
+          // removal for it is moot. Dropping it keeps a removed voter from
+          // holding a permanent exemption in the vote time eligibility recheck.
+          pendingRemovalsBySession.delete(sessionId);
           const freed = releaseSessionVoters(sessionId);
           for (const [sockId, mapping] of socketToVoter.entries()) {
             if (mapping.sessionId === sessionId) {
@@ -1714,12 +2509,38 @@ export default function startServer(store, port = 8090) {
     });
 
     // Socket-based voter session join
-    socket.on('join_session', (payload, callback) => {
+    socket.on('join_session', async (payload, callback) => {
       try {
         const sessionId = payload?.sessionId;
-        const displayName = payload?.displayName;
+        let displayName = payload?.displayName;
         // User identity is server derived from verified handshake cookie only; never trust client payload
         const userId = socket.data?.userId || undefined;
+
+        // Secured sessions run the same eligibility gate as the REST join
+        // endpoint (AC-4, AC-5). Skipping it here registered any caller
+        // straight past the allowlist and the approval queue.
+        const access = await resolveSessionAccess(sessionId);
+        if (access.isSecured) {
+          const decision = await evaluateSecuredEligibility({
+            sessionId,
+            whoCanJoin: access.whoCanJoin,
+            status: access.status,
+            userId,
+            displayName
+          });
+          if (!decision.ok) {
+            if (typeof callback === 'function') {
+              callback(securedDecisionBody(decision));
+            }
+            return;
+          }
+          // An approved voter may omit a display name; fall back to the
+          // profile name exactly as the REST path does.
+          if (!displayName || !String(displayName).trim()) {
+            displayName = decision.user?.name;
+          }
+        }
+
         const result = registerVoter({ sessionId, displayName, store: actualStore, userId });
         if (!result.success) {
           if (typeof callback === 'function') {
@@ -1812,9 +2633,9 @@ export default function startServer(store, port = 8090) {
           return;
         }
 
-        const roomName = `session:${cleanSessionId}`;
-        socket.join(roomName);
-
+        // Resolve identity before touching the room. A secured session admits
+        // only an admin socket or a voter the server issued a token for, so an
+        // ineligible subscriber never joins the room or reads session_state.
         let tokenToCheck = voterTokenCandidate || (socket.data?.voterTokens && socket.data.voterTokens[cleanSessionId]);
         if (tokenToCheck && typeof tokenToCheck === 'string' && tokenToCheck.startsWith('user:')) {
           if (!socket.data?.userId || tokenToCheck !== `user:${socket.data.userId}`) {
@@ -1828,6 +2649,27 @@ export default function startServer(store, port = 8090) {
             tokenToCheck = userTokenCandidate;
           }
         }
+
+        // The store is the authoritative live copy, so the secured check stays
+        // synchronous here: an await would delay the room join past a broadcast
+        // the client triggers straight after subscribing.
+        const storeSession = sessions.get(cleanSessionId);
+        const isSecuredSession = Boolean(storeSession && (storeSession.get('type') || storeSession.get('sessionType')) === 'secured');
+        if (isSecuredSession && !isSocketAdmin(socket)) {
+          const tokenValid = Boolean(tokenToCheck) && validateVoterToken(tokenToCheck, cleanSessionId).valid;
+          if (!tokenValid) {
+            socket.emit('action_error', {
+              action: 'subscribe_session',
+              error: 'NOT_ELIGIBLE',
+              message: 'Join this secured session before subscribing to it.'
+            });
+            return;
+          }
+        }
+
+        const roomName = `session:${cleanSessionId}`;
+        socket.join(roomName);
+
         if (tokenToCheck && typeof tokenToCheck === 'string') {
           const validation = validateVoterToken(tokenToCheck, cleanSessionId);
           if (validation.valid) {
@@ -1993,6 +2835,70 @@ export default function startServer(store, port = 8090) {
       }
     });
 
+    // Admin subscription to the per round turnout view (spec 0008 AC-7, AC-8)
+    socket.on('subscribe_turnout', async (payload) => {
+      try {
+        let sessionId;
+        let tokenCandidate = null;
+        if (typeof payload === 'string') {
+          sessionId = payload;
+        } else if (payload && typeof payload === 'object') {
+          sessionId = payload.sessionId;
+          tokenCandidate = payload.token || payload.adminToken;
+        }
+
+        if (tokenCandidate) {
+          const v = verifyAdminToken(tokenCandidate);
+          if (v.valid) {
+            socket.data = socket.data || {};
+            socket.data.isAdmin = true;
+            socket.data.adminToken = tokenCandidate;
+          }
+        }
+
+        if (!isSocketAdmin(socket)) {
+          socket.emit('action_error', {
+            action: 'subscribe_turnout',
+            error: 'UNAUTHORIZED',
+            message: 'Admin authorization required to subscribe to turnout.'
+          });
+          return;
+        }
+
+        if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+          return;
+        }
+
+        const cleanSessionId = sessionId.trim();
+        socket.join(`turnout:${cleanSessionId}`);
+
+        const rounds = await buildSessionTurnout(cleanSessionId);
+        if (rounds !== null) {
+          socket.emit('session_turnout', { sessionId: cleanSessionId, rounds });
+        }
+      } catch (err) {
+        console.error('Error handling subscribe_turnout:', err);
+      }
+    });
+
+    // Admin un-subscription from the turnout view
+    socket.on('unsubscribe_turnout', (payload) => {
+      try {
+        let sessionId;
+        if (typeof payload === 'string') {
+          sessionId = payload;
+        } else if (payload && typeof payload === 'object' && typeof payload.sessionId === 'string') {
+          sessionId = payload.sessionId;
+        }
+        if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+          return;
+        }
+        socket.leave(`turnout:${sessionId.trim()}`);
+      } catch (err) {
+        console.error('Error handling unsubscribe_turnout:', err);
+      }
+    });
+
     // Handle socket disconnect and record presence transition
     socket.on('disconnect', () => {
       try {
@@ -2062,9 +2968,12 @@ export default function startServer(store, port = 8090) {
         // 0. ALLOWLIST: only known client facing action types are accepted.
         // Internal action types (for example SET_ROUND_LIFECYCLE) and unknown
         // types are rejected here so they can never reach the store.
+        // Rejections go through `respond`, not a bare emit, so an emitting
+        // client always gets an ack. `respond` still emits `action_error` for
+        // these, so a client listening only for that event is unaffected.
         if (!ALLOWED_ACTION_TYPES.has(actionType)) {
-          socket.emit('action_error', {
-            action: actionType,
+          respond({
+            success: false,
             error: 'FORBIDDEN_ACTION',
             message: `Action type "${actionType}" is not accepted from clients.`
           });
@@ -2086,8 +2995,11 @@ export default function startServer(store, port = 8090) {
 
           const verification = verifyAdminToken(adminToken);
           if (!verification.valid) {
-            socket.emit('action_error', {
-              action: actionType,
+            // Acked, not just emitted: a client waiting on the answer of an
+            // admin action (the publish toggle does) would otherwise wait
+            // forever when its token lapsed.
+            respond({
+              success: false,
               error: verification.error || 'UNAUTHORIZED',
               message: verification.message || 'Admin authorization required.'
             });
@@ -2280,9 +3192,16 @@ export default function startServer(store, port = 8090) {
               return;
             }
             const pendingExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-            const publishResultsPublicly = action.publishResultsPublicly !== undefined
-              ? action.publishResultsPublicly
-              : (sessionType !== 'secured');
+            // Spec 0008 AC-11: a secured session is created unpublished. Publishing
+            // is a post completion action (SET_PUBLISH_RESULTS), so an incoming
+            // flag is honoured only for a public session. Honouring it for a
+            // secured one would open its live result reads before it ends, which
+            // AC-4 and AC-6 forbid.
+            const publishResultsPublicly = sessionType === 'secured'
+              ? false
+              : (action.publishResultsPublicly !== undefined
+                  ? action.publishResultsPublicly
+                  : true);
             const whoCanJoin = action.whoCanJoin || (sessionType === 'secured' ? 'allowlist' : 'public');
             const candidateInfo = action.candidateInfo || [];
 
@@ -2505,6 +3424,26 @@ export default function startServer(store, port = 8090) {
               }
               addedCount = toAdd.length;
               removedCount = toRemove.length;
+
+              // AC-3 diff based replacement is the primary way an admin trims
+              // the list, so a voter whose email just vanished must lose their
+              // vote and their socket, not only their row. It goes through the
+              // same revocation path as REMOVE_PARTICIPANT so the two controls
+              // cannot drift apart again.
+              if (toRemove.length > 0) {
+                const droppedEmails = toRemove.map((e) => String(e.email).toLowerCase());
+                const droppedUsers = await User.find({ email: { $in: droppedEmails } });
+                for (const droppedUser of droppedUsers) {
+                  const revoked = revokeAndDisconnectVoter(
+                    cleanSessionId,
+                    String(droppedUser._id),
+                    'You are no longer on the allowlist for this session.'
+                  );
+                  if (revoked) {
+                    console.log(`[Security] SET_ALLOWLIST revoked the voter token for "${droppedUser.email}" in session "${cleanSessionId}"`);
+                  }
+                }
+              }
             }
 
             if (io) {
@@ -2685,36 +3624,15 @@ export default function startServer(store, port = 8090) {
             const targetToken = targetUserId ? `user:${targetUserId}` : null;
 
             if (sessionStatus === 'pending') {
-              // Lobby: immediately disconnect and notify voter
-              const sockets = io?.sockets?.sockets;
-              if (sockets) {
-                for (const s of sockets.values()) {
-                  const sVoter = socketToVoter.get(s.id);
-                  if ((targetUserId && String(s.data?.userId) === targetUserId) || (targetToken && sVoter?.voterToken === targetToken)) {
-                    s.emit('participant_status', {
-                      sessionId: cleanSessionId,
-                      status: 'removed',
-                      message: 'You have been removed from this session.'
-                    });
-                    if (sVoter) {
-                      socketToVoter.delete(s.id);
-                      actualStore.dispatch({
-                        type: 'RECORD_PRESENCE_DISCONNECT',
-                        sessionId: cleanSessionId,
-                        voterToken: sVoter.voterToken,
-                        socketId: s.id,
-                        timestamp: Date.now()
-                      });
-                    }
-                    s.leave(`session:${cleanSessionId}`);
-                  }
-                }
-              }
-              if (targetToken) {
-                const sessionTokens = tokensBySession.get(cleanSessionId);
-                if (sessionTokens) {
-                  sessionTokens.delete(targetToken);
-                }
+              // Lobby: revoke, disconnect and notify the voter right away (AC-7).
+              // Removal is a security action, so it revokes the token itself
+              // from votersByToken, not only the session headcount entry: a
+              // token left in the roster still passes validateVoterToken
+              // through the voter.sessionId === normSession shortcut and casts
+              // counted ballots while the admin's roster shows them gone.
+              const revoked = revokeAndDisconnectVoter(cleanSessionId, targetUserId, 'You have been removed from this session.');
+              if (revoked) {
+                console.log(`[Security] REMOVE_PARTICIPANT revoked a signed in voter token for session "${cleanSessionId}"`);
               }
             } else if (sessionStatus === 'open') {
               // During voting: defer removal to end of current round
@@ -2769,6 +3687,14 @@ export default function startServer(store, port = 8090) {
               clearedCount = (delAllow.deletedCount || 0) + (delJoin.deletedCount || 0);
 
               await Session.updateOne({ sessionId: cleanSessionId }, { $set: { whoCanJoin } });
+            }
+
+            // AC-2 clears the roster on a switch, so the tokens it cleared
+            // must go too. Without this a voter admitted under allowlist keeps
+            // a valid token after the switch to approval.
+            const revokedOnSwitch = revokeSessionVoters(cleanSessionId);
+            if (revokedOnSwitch > 0) {
+              console.log(`[Security] SET_WHO_CAN_JOIN revoked ${revokedOnSwitch} voter token(s) for session "${cleanSessionId}"`);
             }
 
             actualStore.dispatch({
@@ -2862,12 +3788,20 @@ export default function startServer(store, port = 8090) {
             if (sessionId && pendingRemovalsBySession.has(sessionId)) {
               const pendingTokens = pendingRemovalsBySession.get(sessionId);
               if (pendingTokens && pendingTokens.size > 0) {
-                const sockets = io?.sockets?.sockets;
                 for (const targetToken of pendingTokens) {
-                  if (sockets) {
-                    for (const s of sockets.values()) {
-                      const sVoter = socketToVoter.get(s.id);
-                      if (sVoter?.voterToken === targetToken || (s.data?.userId && targetToken === `user:${s.data.userId}`)) {
+                  // The deferred mid round removal path needs the same
+                  // revocation as the lobby path, otherwise a voter removed
+                  // during voting keeps voting into the next round.
+                  const targetUserId = targetToken.startsWith('user:') ? targetToken.slice('user:'.length) : null;
+                  if (targetUserId) {
+                    revokeAndDisconnectVoter(sessionId, targetUserId, 'You have been removed from this session.');
+                  } else {
+                    // An anonymous token has no user record to revoke, so drop
+                    // the socket and the presence row directly.
+                    const sockets = io?.sockets?.sockets;
+                    if (sockets) {
+                      for (const s of sockets.values()) {
+                        if (socketToVoter.get(s.id)?.voterToken !== targetToken) continue;
                         s.emit('participant_status', {
                           sessionId,
                           status: 'removed',
@@ -2875,6 +3809,7 @@ export default function startServer(store, port = 8090) {
                         });
                         socketToVoter.delete(s.id);
                         s.leave(`session:${sessionId}`);
+                        s.disconnect(true);
                       }
                     }
                   }
@@ -2895,6 +3830,77 @@ export default function startServer(store, port = 8090) {
             }
 
             actualStore.dispatch(action);
+            return;
+          }
+
+          // Authoritative validation and execution for SET_PUBLISH_RESULTS
+          // (spec 0008 AC-3). Publishing is post completion only, and the
+          // Session and Result rows are written in one step so they never drift.
+          if (actionType === 'SET_PUBLISH_RESULTS') {
+            const sessionId = action.sessionId || action.electionId;
+            if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+              respond({ success: false, error: 'VALIDATION_ERROR', message: 'Session ID is required.' });
+              return;
+            }
+            if (typeof action.publishResultsPublicly !== 'boolean') {
+              respond({ success: false, error: 'VALIDATION_ERROR', message: 'Publish results publicly must be a boolean.' });
+              return;
+            }
+
+            const cleanSessionId = sessionId.trim();
+            const state = actualStore.getState();
+            const session = state?.getIn ? state.getIn(['sessions', cleanSessionId]) : null;
+            let status = session ? session.get('status') : null;
+            if (!session && isConnected()) {
+              try {
+                const doc = await Session.findOne({ sessionId: cleanSessionId }).lean();
+                if (!doc) {
+                  respond({ success: false, error: 'SESSION_NOT_FOUND', message: 'Session not found.' });
+                  return;
+                }
+                status = doc.status;
+              } catch (dbErr) {
+                respond({ success: false, error: 'DATABASE_ERROR', message: 'Failed to read session.' });
+                return;
+              }
+            }
+            if (!session && !status) {
+              respond({ success: false, error: 'SESSION_NOT_FOUND', message: 'Session not found.' });
+              return;
+            }
+            if (status !== 'completed' && status !== 'archived') {
+              respond({
+                success: false,
+                error: 'SESSION_NOT_COMPLETED',
+                message: 'Results can only be published after the session has completed.'
+              });
+              return;
+            }
+
+            if (isConnected()) {
+              try {
+                await repository.setPublishResultsPublicly(cleanSessionId, action.publishResultsPublicly);
+              } catch (dbErr) {
+                respond({ success: false, error: 'DATABASE_ERROR', message: 'Failed to update publish state.' });
+                return;
+              }
+            }
+
+            actualStore.dispatch({
+              type: 'SET_PUBLISH_RESULTS',
+              sessionId: cleanSessionId,
+              publishResultsPublicly: action.publishResultsPublicly
+            });
+
+            if (io) {
+              broadcastSessions(io, actualStore.getState());
+            }
+
+            respond({
+              success: true,
+              sessionId: cleanSessionId,
+              publishResultsPublicly: action.publishResultsPublicly
+            });
             return;
           }
 
@@ -2963,6 +3969,50 @@ export default function startServer(store, port = 8090) {
               message: tokenValidation.message
             });
             return;
+          }
+
+          // Defense in depth for secured sessions. The token checks above prove
+          // the voter was registered, not that they are still eligible, and an
+          // admin can cut a voter off between two rounds. Re-reading eligibility
+          // here means a removal, a rejection, or an allowlist paste that drops
+          // the voter takes effect on the very next vote rather than the next
+          // reconnect. Fails closed when the lookup cannot be completed.
+          const voteVoterUserId = socket.data?.userId ||
+            (voterToken.startsWith('user:') ? voterToken.slice('user:'.length) : null);
+          if (voteVoterUserId) {
+            const voteAccess = await resolveSessionAccess(sessionId);
+            if (voteAccess.isSecured) {
+              // A removal issued while the session was open is deferred to the
+              // end of the current round (AC-7), so this recheck must not
+              // enforce it early. REMOVE_PARTICIPANT clears the allowlist or
+              // join request row immediately so the admin roster updates at
+              // once, and reading that cleared row here is what used to refuse
+              // the voter's own vote in the very round that was meant to
+              // remain theirs. NEXT clears the pending set after revoking, so a
+              // voter who is still in it is exactly the voter who owes a vote
+              // and must not be re-read from a row the removal already cleared.
+              const voteVoterToken = `user:${voteVoterUserId}`;
+              const removalDeferred =
+                pendingRemovalsBySession.get(sessionId)?.has(voteVoterToken) === true;
+
+              if (!removalDeferred) {
+                const userEmailForVote = await resolveVoterEmail(voteVoterUserId);
+                const eligible = await isVoterStillEligible({
+                  sessionId,
+                  whoCanJoin: voteAccess.whoCanJoin,
+                  userId: voteVoterUserId,
+                  email: userEmailForVote
+                });
+                if (!eligible) {
+                  socket.emit('action_error', {
+                    action: 'VOTE',
+                    error: 'NOT_ELIGIBLE',
+                    message: 'You are no longer eligible to vote in this session.'
+                  });
+                  return;
+                }
+              }
+            }
           }
 
           // Check current active candidates in tournament / single ballot

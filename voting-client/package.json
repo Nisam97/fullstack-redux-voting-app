@@ -7,8 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test test/voting_spec.js test/results_spec.js test/auth_spec.js test/history_spec.js test/stage_c_spec.js test/stage_d_spec.js test/stage_e_spec.js test/timer_redux_spec.js test/countdown_timer_spec.js test/timer_expiry_spec.js test/admin_timer_spec.js test/results_chart_spec.js test/results_visibility_spec.js test/results_transition_spec.js test/results_hardening_spec.js test/admin_workflow_spec.js test/early_completion_frontend_spec.js test/round_results_lifecycle_spec.js test/server_authority_spec.js test/admin_mode_note_spec.js test/round_history_spec.js test/single_ballot_tie_ladder_client_spec.js test/voter_auth_slice_spec.js test/review_majors_client_spec.js test/review_minors_client_spec.js test/join_code_spec.js test/presence_client_spec.js",
-    "preview": "vite preview"
+    "test": "npm run test:unit && npm run test:component",
+    "preview": "vite preview",
+    "test:unit": "node --test \"test/*_spec.js\"",
+    "test:component": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
@@ -25,13 +28,20 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "axe-core": "^4.14.0",
+    "dom-accessibility-api": "^0.5.16",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
-    "vite": "^8.1.1"
+    "jsdom": "^29.1.1",
+    "vite": "^8.1.1",
+    "vitest": "^5.0.3"
   }
 }

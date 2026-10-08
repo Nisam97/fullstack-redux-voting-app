@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { setSessions, setSessionState, setState, lobbyUpdate, setPresenceUpdate, setTimerState, setTiePending } from '../redux/voteSlice.js';
+import { setSessions, setSessionState, setState, lobbyUpdate, setPresenceUpdate, setTimerState, setTiePending, setTurnout, setAdminSessionExpired } from '../redux/voteSlice.js';
 
 const getDefaultServerUrl = () => {
   if (typeof window !== 'undefined' && window.__VOTING_SERVER_URL__) {
@@ -17,11 +17,46 @@ const getDefaultServerUrl = () => {
 export const SERVER_URL = getDefaultServerUrl();
 
 /**
+ * localStorage key holding the admin JWT. Owned here rather than in auth.js
+ * because the socket handshake needs it at module load, before any login call
+ * has run. auth.js re-exports it so its public API is unchanged.
+ */
+export const ADMIN_TOKEN_KEY = 'votesphere_admin_jwt';
+// Lives here for the same reason as the token key: dropping a dead admin
+// credential happens in this module, and auth.js must not be imported from here
+// because it already imports this module.
+export const ADMIN_USER_KEY = 'votesphere_admin_user';
+
+/**
+ * Reads the stored admin JWT, tolerating environments with no localStorage.
+ */
+export function readStoredAdminToken() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(ADMIN_TOKEN_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+const initialAdminToken = readStoredAdminToken();
+
+/**
  * Singleton Socket.io client instance connecting to the authoritative voting server.
+ *
+ * The admin JWT is passed as handshake `auth` so the server can recognise this
+ * socket as an admin. That matters because the server filters secured sessions
+ * out of the registry broadcast for any socket it cannot authenticate, so an
+ * admin whose token is missing sees an empty admin panel. Socket.io only sends
+ * `auth` when a connection is established, which is why a stored token has to be
+ * read here at construction rather than assigned after login.
  */
 export const socket = io(SERVER_URL, {
   autoConnect: true,
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  ...(initialAdminToken ? { auth: { token: initialAdminToken } } : {})
 });
 
 /**
@@ -36,6 +71,41 @@ export const subscribedElections = subscribedSessions;
  */
 export function getSocket() {
   return socket;
+}
+
+/**
+ * Applies an admin JWT to the socket handshake and, when the token actually
+ * changed, reconnects so the server sees it.
+ *
+ * Assigning `socket.auth` on its own does nothing for an already connected
+ * socket: Socket.io only transmits `auth` during the handshake. Reconnecting is
+ * the only way to change the identity the server holds. `connectSocketToStore`
+ * re-requests the registry on every 'connect', so the admin session list
+ * refreshes on its own.
+ *
+ * @param {string|null} token Admin JWT, or null to clear it (logout).
+ * @returns {boolean} true when a reconnect was triggered.
+ */
+export function applyAdminTokenToSocket(token) {
+  if (!socket) return false;
+  const next = token || null;
+  const current = socket.auth?.token || null;
+  if (next === current) return false;
+
+  socket.auth = { ...socket.auth };
+  if (next) {
+    socket.auth.token = next;
+  } else {
+    delete socket.auth.token;
+  }
+
+  try {
+    socket.disconnect();
+    socket.connect();
+  } catch {
+    // A transport failure here surfaces through the normal reconnect path.
+  }
+  return true;
 }
 
 /**
@@ -182,6 +252,42 @@ export function setSubscribedSession(newSessionId, socketInstance = socket) {
 export const setSubscribedElection = setSubscribedSession;
 
 /**
+ * Admin subscription to the per round turnout view (spec 0008 AC-7). The server
+ * pushes the initial snapshot on subscribe and a fresh one after each round
+ * closes. Admin only; a non admin socket receives an action_error.
+ *
+ * @param {string} sessionId
+ * @param {object} [socketInstance=socket]
+ */
+export function subscribeTurnout(sessionId, socketInstance = socket) {
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return;
+  }
+  const token = readStoredAdminToken();
+  const payload = token
+    ? { sessionId: sessionId.trim(), token }
+    : { sessionId: sessionId.trim() };
+  if (socketInstance && typeof socketInstance.emit === 'function') {
+    socketInstance.emit('subscribe_turnout', payload);
+  }
+}
+
+/**
+ * Unsubscribes from the turnout view.
+ *
+ * @param {string} sessionId
+ * @param {object} [socketInstance=socket]
+ */
+export function unsubscribeTurnout(sessionId, socketInstance = socket) {
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+    return;
+  }
+  if (socketInstance && typeof socketInstance.emit === 'function') {
+    socketInstance.emit('unsubscribe_turnout', { sessionId: sessionId.trim() });
+  }
+}
+
+/**
  * Returns a list of currently subscribed session IDs.
  * 
  * @returns {string[]}
@@ -235,6 +341,7 @@ export function connectSocketToStore(store, socketInstance = socket) {
     socketInstance.off('timer_state');
     socketInstance.off('tie_pending');
     socketInstance.off('state');
+    socketInstance.off('session_turnout');
     socketInstance.off('connect');
   }
 
@@ -266,6 +373,33 @@ export function connectSocketToStore(store, socketInstance = socket) {
   // Listen for tie pending ladder updates
   socketInstance.on('tie_pending', (tieData) => {
     store.dispatch(setTiePending(tieData));
+  });
+
+  // Admin per round turnout snapshot (spec 0008 AC-7)
+  socketInstance.on('session_turnout', (turnoutData) => {
+    store.dispatch(setTurnout(turnoutData));
+  });
+
+  // A server side UNAUTHORIZED means the stored admin JWT is no longer
+  // verifiable: the server restarted under a different JWT secret, the secret
+  // was rotated, or the credential was revoked. The local expiry check in
+  // isAdminLoggedIn still passes, so without this the app keeps rendering admin
+  // UI whose every action is refused, and the admin reads an empty per round
+  // turnout as "no rounds recorded yet". Drop the dead credential, clear the
+  // socket handshake, and let the store say the session is gone.
+  socketInstance.on('action_error', (err) => {
+    if (!err || err.error !== 'UNAUTHORIZED') return;
+    if (!readStoredAdminToken()) return;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+        window.localStorage.removeItem(ADMIN_USER_KEY);
+      }
+    } catch {
+      // storage unavailable; the handshake reset below is the part that matters
+    }
+    applyAdminTokenToSocket(null);
+    store.dispatch(setAdminSessionExpired(true));
   });
 
   // Backward compatibility: legacy single-session 'state' event
