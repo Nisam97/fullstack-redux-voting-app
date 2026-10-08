@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "npm run test:unit && npm run test:component",
     "preview": "vite preview",
-    "test:unit": "node --test \"test/*_spec.js\"",
+    "test:unit": "node --test \"test/**/*_spec.js\"",
     "test:component": "vitest run",
     "test:watch": "vitest"
   },
