@@ -37,10 +37,16 @@ jobs:
         with:
           node-version: 24
           cache: 'npm'
-          cache-dependency-path: 'voting-server/package-lock.json'
+          cache-dependency-path: |
+            voting-server/package-lock.json
+            voting-client/package-lock.json
 
       - name: Install Backend Dependencies
         working-directory: ./voting-server
+        run: npm ci
+
+      - name: Install Frontend Dependencies (required by cross-package integration spec)
+        working-directory: ./voting-client
         run: npm ci
 
       - name: Run Backend Tests

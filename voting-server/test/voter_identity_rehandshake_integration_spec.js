@@ -48,19 +48,6 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // compiler never sees the import, and Node's own ESM loader resolves it.
 const importClientModule = new Function('specifier', 'return import(specifier);');
 
-// The client module under test is ESM and lives in the sibling package, so Node's
-// loader resolves its own dependencies against that package's node_modules. In CI
-// the server job installs only the server deps, so socket.io-client must be
-// resolvable from the server's node_modules. The client package declares the same
-// version as a dependency, but the server job never installs it.
-const CLIENT_PACKAGE_NODE_MODULES = path.resolve(__dirname, '..', '..', 'voting-client', 'node_modules');
-if (fs.existsSync(CLIENT_PACKAGE_NODE_MODULES)) {
-  // Prepend so the client module's imports resolve from its own package first.
-  const existing = process.env.NODE_PATH || '';
-  process.env.NODE_PATH = [CLIENT_PACKAGE_NODE_MODULES, existing].filter(Boolean).join(path.delimiter);
-  require('module').Module._initPaths();
-}
-
 const CLIENT_MODULE_URLS = {
   socket: pathToFileURL(
     path.resolve(__dirname, '..', '..', 'voting-client', 'src', 'services', 'socket.js')
