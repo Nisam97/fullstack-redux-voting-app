@@ -12,6 +12,8 @@ function Navbar() {
 
   const [isAdmin, setIsAdmin] = useState(() => isAdminLoggedIn());
   const [adminUser, setAdminUser] = useState(() => getAdminUser());
+  const [voterLogoutError, setVoterLogoutError] = useState(null);
+  const [voterLogoutPending, setVoterLogoutPending] = useState(false);
 
   const currentVoter = useSelector(selectCurrentVoter);
   const isVoterLoggedIn = useSelector(selectIsVoterLoggedIn);
@@ -34,9 +36,39 @@ function Navbar() {
   };
 
   const handleVoterLogout = async () => {
-    await logoutVoter();
-    dispatch(clearVoterAuth());
-    navigate("/");
+    // A sign out is not idempotent while it is in flight: a second click would
+    // POST again and race the first response, so a slow server could be hit
+    // twice. The disabled button below is the visible guard; this early return
+    // covers a programmatic or keyboard activation that slips through before
+    // React re-renders the disabled state.
+    if (voterLogoutPending) return;
+    setVoterLogoutPending(true);
+    setVoterLogoutError(null);
+    try {
+      const res = await logoutVoter();
+
+      // The server owns the session, so only its confirmation may clear local
+      // voter state. A refusal means the vs_voter cookie is most likely still
+      // live, and clearing here would show an anonymous navbar over a session the
+      // server still honours. A 401 is the exception: the server has answered
+      // that there is no valid voter session left, so keeping the local greeting
+      // would show a signed in voter the server treats as anonymous.
+      const serverHasNoSession = res && res.status === 401;
+      if (!res?.success && !serverHasNoSession) {
+        setVoterLogoutError(
+          res?.message || 'Sign out failed, so you are still signed in. Please try again.'
+        );
+        return;
+      }
+
+      dispatch(clearVoterAuth());
+      navigate("/");
+    } finally {
+      // Released on every path. On success the component unmounts when the route
+      // changes, so this only matters for the failure path, where the button
+      // must become clickable again to retry.
+      setVoterLogoutPending(false);
+    }
   };
 
   return (
@@ -101,6 +133,11 @@ function Navbar() {
               onClick={handleVoterLogout}
               className="login-btn"
               data-testid="logout-btn"
+              // Disabled while the request is in flight, so a slow server cannot
+              // be double clicked into two sign out requests. aria-busy tells an
+              // assistive tech user the control is working, not broken.
+              disabled={voterLogoutPending}
+              aria-busy={voterLogoutPending}
               style={{
                 background: "rgba(239, 68, 68, 0.15)",
                 color: "#fca5a5",
@@ -108,11 +145,38 @@ function Navbar() {
                 display: "flex",
                 alignItems: "center",
                 gap: "0.3rem",
-                cursor: "pointer"
+                cursor: voterLogoutPending ? "progress" : "pointer",
+                opacity: voterLogoutPending ? 0.7 : 1
               }}
             >
-              <LogOut size={14} /> Log out
+              <LogOut size={14} /> {voterLogoutPending ? "Signing out\u2026" : "Log out"}
             </button>
+            {voterLogoutError && (
+              // Positioned below the bar rather than inline: the navbar is
+              // fixed and its height is relied on by every page's top offset,
+              // so an error must not be able to grow it.
+              <p
+                role="alert"
+                data-testid="voter-logout-error"
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: "8%",
+                  margin: "0.5rem 0 0 0",
+                  maxWidth: "min(340px, 80vw)",
+                  padding: "0.5rem 0.75rem",
+                  background: "rgba(15, 23, 42, 0.95)",
+                  border: "1px solid rgba(239, 68, 68, 0.45)",
+                  borderRadius: "8px",
+                  color: "#fca5a5",
+                  fontSize: "0.8rem",
+                  lineHeight: 1.35,
+                  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.45)"
+                }}
+              >
+                {voterLogoutError}
+              </p>
+            )}
           </>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>

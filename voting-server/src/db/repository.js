@@ -373,44 +373,37 @@ export async function countResultsWithoutType() {
 }
 
 /**
- * Retrieve completed results sorted by completedAt desc (spec 0008 AC-5).
+ * Retrieve every completed result as the candidate set for the history read.
  *
- * A completed result is listed when it is public, or its session is a secured
- * one the admin has published. `completedAt: { $ne: null }` excludes partial
- * rows a round push created while the session is still running.
+ * This query deliberately does NOT decide membership. It returns each row with
+ * a `completedAt`, and the read path (`GET /api/sessions/history`) runs the
+ * shared visibility matrix (`resolveResultVisibility`) over the candidates so
+ * membership is the same per caller rule the result and rounds reads use. That
+ * keeps participant result visibility separate from public publication: a
+ * public result and a published secured result are listed for everyone, while
+ * an unpublished secured result is listed only for the admin and its approved
+ * participants. Filtering here instead is what made a concluded secured
+ * tournament invisible to the participants who voted in it.
  *
- * A row with no `type` is deliberately NOT listed. The archive is public and
- * anonymous, so a row whose securedness cannot be established must not appear
- * there: reading a missing `type` as public published the winner of a secured
- * session to anyone holding its id, the same leak the per-session reads close
- * by failing closed. Legacy rows reach the archive the moment the backfill
- * gives them a type (`backfillResultTypes`, run at startup), which is the only
- * path that should put one there. Pinned by
- * `test/visibility_and_privacy_spec.js` section 16.
+ * `completedAt: { $ne: null }` excludes partial rows a round push created while
+ * the session is still running. A row with no `type` is still returned here and
+ * fails closed at the read path (gated as secured), so it never reaches an
+ * anonymous caller; the startup `backfillResultTypes` is what gives a legacy
+ * public row its type and makes it listable again.
  *
  * Membership keys off completion, not off a winner. A session that concluded
  * with no official winner (`no_result`, `winner: null` with a fresh
- * `completedAt`) is still a completed public result, so AC-5 lists it like any
- * other; the history row renders a neutral label for it instead of an empty
- * champion banner. Asserted in
- * `test/visibility_and_privacy_spec.js` ("lists a completed public result with
- * no official winner"), so a future tightening of this filter fails a test
- * rather than slipping through.
+ * `completedAt`) is still a completed result, so it is a candidate like any
+ * other and the history row renders a neutral label for it.
  *
- * @param {number} [limit=50]
+ * @param {number} [limit=500] Candidate cap, so a large archive is not read in one call
  * @returns {Promise<Array>}
  */
-export async function getCompletedResults(limit = 50) {
+export async function getCompletedResults(limit = 500) {
   const parsedLimit = parseInt(limit, 10);
-  const maxResults = isNaN(parsedLimit) || parsedLimit <= 0 ? 50 : Math.min(parsedLimit, 100);
+  const maxResults = isNaN(parsedLimit) || parsedLimit <= 0 ? 500 : Math.min(parsedLimit, 500);
   return await Result.find(
-    {
-      completedAt: { $ne: null },
-      $or: [
-        { type: 'public' },
-        { publishResultsPublicly: true }
-      ]
-    },
+    { completedAt: { $ne: null } },
     { rounds: 0 }
   ).sort({ completedAt: -1 }).limit(maxResults).lean();
 }

@@ -458,6 +458,40 @@ describe('Feature 9: Visibility and privacy (Spec 0008)', function () {
       const denied = await httpGet(port, '/api/sessions/sec_participant/result', { Cookie: outsiderCookie });
       expect(denied.statusCode).to.equal(404);
     });
+
+    it('lists a completed unpublished secured result in an approved participant history, never for an outsider', async () => {
+      // Participant result visibility is separate from public publication. An
+      // approved participant finds the concluded tournament in their history as
+      // soon as the result exists, without the admin publishing it, while an
+      // anonymous caller and a signed in outsider still see nothing at all.
+      await createDbSession('sec_history_participant', { type: 'secured', whoCanJoin: 'allowlist', status: 'completed' });
+      await saveCompletedResult('sec_history_participant', { type: 'secured', publish: false, winner: 'Alpha' });
+
+      const user = await makeUser('histvoter@example.com', 'History Voter');
+      await SessionAllowlistEntry.create({ sessionId: 'sec_history_participant', email: 'histvoter@example.com' });
+      const cookie = `vs_voter=${generateVoterToken(user)}`;
+
+      const participantIds = async () => (await httpGet(port, '/api/sessions/history', { Cookie: cookie })).body.results.map((r) => r.sessionId);
+      expect(await participantIds()).to.include('sec_history_participant');
+
+      const participantRow = (await httpGet(port, '/api/sessions/history', { Cookie: cookie })).body.results
+        .find((r) => r.sessionId === 'sec_history_participant');
+      expect(participantRow.type).to.equal('secured');
+      expect(participantRow.publishResultsPublicly).to.equal(false);
+
+      const anonIds = (await httpGet(port, '/api/sessions/history')).body.results.map((r) => r.sessionId);
+      expect(anonIds).to.not.include('sec_history_participant');
+
+      const outsider = await makeUser('histoutsider@example.com', 'History Outsider');
+      const outsiderCookie = `vs_voter=${generateVoterToken(outsider)}`;
+      const outsiderIds = (await httpGet(port, '/api/sessions/history', { Cookie: outsiderCookie })).body.results.map((r) => r.sessionId);
+      expect(outsiderIds).to.not.include('sec_history_participant');
+
+      // Publishing is still a separate admin action, and it is what makes the
+      // row public. Until then the row carries no public visibility of its own.
+      const resultDoc = await Result.findOne({ sessionId: 'sec_history_participant' }).lean();
+      expect(resultDoc.publishResultsPublicly).to.equal(false);
+    });
   });
 
   describe('3. Publish / unpublish action (AC-3, AC-4)', () => {
@@ -791,7 +825,12 @@ describe('Feature 9: Visibility and privacy (Spec 0008)', function () {
       const refusal = new Promise((resolve) => anonSocket.once('action_error', resolve));
       anonSocket.emit('subscribe_session', { sessionId: 'leak_secured_2' });
       const refusalBody = await refusal;
-      expect(refusalBody.error).to.equal('NOT_ELIGIBLE');
+      // An anonymous socket without a verified vs_voter cookie is refused the
+      // secured session handshake as AUTHENTICATION_REQUIRED on the socket path,
+      // matching the secured join endpoint: a probe cannot tell whether the
+      // refusal is because the session is secured or because the caller is not
+      // signed in.
+      expect(refusalBody.error).to.equal('AUTHENTICATION_REQUIRED');
       assertNoEmail(refusalBody, 'secured subscribe_session refusal');
 
       // An allowlisted signed in voter who has joined does get the state, so the
@@ -1514,14 +1553,18 @@ describe('Feature 9: Visibility and privacy (Spec 0008)', function () {
       expect(row.publishResultsPublicly).to.equal(true);
     });
 
-    it('keeps a no_result result out of the history listing while it is secured and unpublished', async () => {
+    it('keeps a no_result result out of the anonymous history listing while it is secured and unpublished', async () => {
       // covers: AC-5, AC-2
+      // The listing is now caller aware, so the gate is asserted through the
+      // read an anonymous visitor makes rather than on the candidate query. The
+      // repository returns completed rows as candidates and the read path runs
+      // the shared matrix; an anonymous caller still sees nothing.
       createDbSession('sec_no_result_hidden', { type: 'secured', whoCanJoin: 'allowlist', status: 'pending' });
       await runToNoResult('sec_no_result_hidden', { type: 'secured', whoCanJoin: 'allowlist' });
       expect(await waitForResultRow('sec_no_result_hidden')).to.not.equal(null);
 
-      const listed = await repository.getCompletedResults();
-      expect(listed.map(r => r.sessionId)).to.not.include('sec_no_result_hidden');
+      const listed = (await httpGet(port, '/api/sessions/history')).body.results.map((r) => r.sessionId);
+      expect(listed).to.not.include('sec_no_result_hidden');
     });
   });
 

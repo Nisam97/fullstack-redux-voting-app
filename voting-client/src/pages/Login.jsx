@@ -4,6 +4,7 @@ import { useDispatch } from "react-redux";
 import { setVoterAuth } from "../redux/voterAuthSlice";
 import { setAdminSessionExpired } from "../redux/voteSlice";
 import { requestOtp, verifyOtp, loginAdmin } from "../services/auth";
+import { reattachVoterIdentityToSocket } from "../services/socket";
 import { Mail, KeyRound, ArrowRight, Shield, AlertCircle, CheckCircle2, RotateCw } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
@@ -99,6 +100,11 @@ function Login() {
 
     // Success! Update Redux voter state
     dispatch(setVoterAuth({ user: res.user }));
+    // The socket handshook at app load, before the server set the vs_voter
+    // cookie, so its identity is still anonymous. Force a fresh handshake now
+    // that the cookie exists, or the server cannot recognise this voter on the
+    // socket until a page reload.
+    reattachVoterIdentityToSocket();
     const dest = location.state?.from?.pathname || "/";
     navigate(dest, { replace: true });
   };

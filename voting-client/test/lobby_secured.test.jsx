@@ -35,7 +35,15 @@ vi.mock('../src/services/socket.js', () => {
     connectSocket: vi.fn(),
     connectSocketToStore: vi.fn(),
     subscribedSessions: new Set(),
-    readStoredAdminToken: () => null,
+    // services/api.js sources the admin header from this reader, so the stub
+    // mirrors the real one: return the stored token rather than a hard null.
+    readStoredAdminToken: () => {
+      try {
+        return window.localStorage.getItem('votesphere_admin_jwt') || null
+      } catch {
+        return null
+      }
+    },
     applyAdminTokenToSocket: vi.fn(),
     ADMIN_TOKEN_KEY: 'votesphere_admin_jwt',
     // Lets a spec deliver a server broadcast into the mounted component.

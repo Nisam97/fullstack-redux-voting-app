@@ -7,6 +7,24 @@ on:
     branches: [ develop1, main, master ]
 
 jobs:
+  contract-docs:
+    name: API Contract Docs Up To Date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The generator only uses Node built-ins, so no install step is needed.
+      # It fails (exit 1) when docs/API_CONTRACT.md no longer matches the shared
+      # contract, catching drift before review rather than after a merge.
+      - name: Verify generated API contract table is current
+        run: node scripts/generate-api-contract-table.mjs --check
+
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest

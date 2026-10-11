@@ -1,7 +1,7 @@
 # 0001. Session Model Extension: Rationale
 
 **Date**: 2026-09-21
-**Status**: In Progress
+**Status**: Accepted
 
 ## Context
 

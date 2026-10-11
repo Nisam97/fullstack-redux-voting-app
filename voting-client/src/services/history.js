@@ -1,22 +1,4 @@
-import { SERVER_URL } from './socket.js';
-import { getAdminToken } from './auth.js';
-
-/**
- * Builds the request headers for a result read. The `vs_voter` cookie rides
- * along via `credentials: 'include'`; the admin Bearer header is attached when
- * an admin token is in storage, so the admin and an approved participant can
- * both read a gated secured result (spec 0008).
- *
- * @returns {Object}
- */
-function buildResultHeaders() {
-  const headers = { 'Accept': 'application/json' };
-  const token = getAdminToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
+import { apiRequest } from './api.js';
 
 /**
  * Fetch list of completed tournament results history.
@@ -25,42 +7,29 @@ function buildResultHeaders() {
  * @returns {Promise<{ success: boolean, results?: Array<object>, count?: number, error?: string, message?: string }>}
  */
 export async function fetchSessionHistory(limit = 50) {
-  try {
-    const url = new URL(`${SERVER_URL}/api/sessions/history`);
-    if (limit) {
-      url.searchParams.set('limit', String(limit));
-    }
+  const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : '';
+  // apiRequest attaches the `vs_voter` cookie and, when an admin token is
+  // stored, the admin Bearer header, so the admin and an approved participant
+  // can both read a gated secured result (spec 0008).
+  const res = await apiRequest(`/api/sessions/history${query}`);
+  const data = res.data;
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: buildResultHeaders(),
-      credentials: 'include'
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'DATABASE_ERROR',
-        message: data.message || 'Failed to retrieve results history.',
-        results: []
-      };
-    }
-
-    return {
-      success: true,
-      results: Array.isArray(data.results) ? data.results : [],
-      count: typeof data.count === 'number' ? data.count : (data.results?.length || 0)
-    };
-  } catch (err) {
+  if (!res.ok || !data || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Network error connecting to history server.',
+      error: res.networkError ? 'NETWORK_ERROR' : ((data && data.error) || 'DATABASE_ERROR'),
+      message: res.networkError
+        ? (res.message || 'Network error connecting to history server.')
+        : ((data && data.message) || 'Failed to retrieve results history.'),
       results: []
     };
   }
+
+  return {
+    success: true,
+    results: Array.isArray(data.results) ? data.results : [],
+    count: typeof data.count === 'number' ? data.count : (data.results?.length || 0)
+  };
 }
 
 /**
@@ -78,34 +47,23 @@ export async function fetchSessionResult(sessionId) {
     };
   }
 
-  try {
-    const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/result`, {
-      method: 'GET',
-      headers: buildResultHeaders(),
-      credentials: 'include'
-    });
+  const res = await apiRequest(`/api/sessions/${encodeURIComponent(sessionId)}/result`);
+  const data = res.data;
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'RESULT_NOT_FOUND',
-        message: data.message || `No result found for session "${sessionId}".`
-      };
-    }
-
-    return {
-      success: true,
-      result: data.result || null
-    };
-  } catch (err) {
+  if (!res.ok || !data || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Network error connecting to history server.'
+      error: res.networkError ? 'NETWORK_ERROR' : ((data && data.error) || 'RESULT_NOT_FOUND'),
+      message: res.networkError
+        ? (res.message || 'Network error connecting to history server.')
+        : ((data && data.message) || `No result found for session "${sessionId}".`)
     };
   }
+
+  return {
+    success: true,
+    result: data.result || null
+  };
 }
 
 /**
@@ -123,35 +81,23 @@ export async function fetchSessionRounds(sessionId) {
     };
   }
 
-  try {
-    const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/rounds`, {
-      method: 'GET',
-      headers: buildResultHeaders(),
-      credentials: 'include'
-    });
+  const res = await apiRequest(`/api/sessions/${encodeURIComponent(sessionId)}/rounds`);
+  const data = res.data;
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'ROUNDS_NOT_FOUND',
-        message: data.message || `No rounds found for session "${sessionId}".`,
-        rounds: []
-      };
-    }
-
-    return {
-      success: true,
-      sessionId: data.sessionId,
-      rounds: Array.isArray(data.rounds) ? data.rounds : []
-    };
-  } catch (err) {
+  if (!res.ok || !data || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Network error connecting to history server.',
+      error: res.networkError ? 'NETWORK_ERROR' : ((data && data.error) || 'ROUNDS_NOT_FOUND'),
+      message: res.networkError
+        ? (res.message || 'Network error connecting to history server.')
+        : ((data && data.message) || `No rounds found for session "${sessionId}".`),
       rounds: []
     };
   }
+
+  return {
+    success: true,
+    sessionId: data.sessionId,
+    rounds: Array.isArray(data.rounds) ? data.rounds : []
+  };
 }

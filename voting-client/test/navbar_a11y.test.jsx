@@ -190,18 +190,112 @@ describe('Navbar: signed in voter state (covers: AC-3 hardening)', () => {
 
   it('logs the voter out, clears Redux auth, and lands on the home page', async () => {
     const user = userEvent.setup()
-    auth.logoutVoter.mockResolvedValue(undefined)
+    // The server's confirmation is what clears the slice, not a bare resolved
+    // promise, so the stub returns the shape a real successful logout returns.
+    auth.logoutVoter.mockResolvedValue({ success: true, status: 200, error: null, message: null })
     const store = makeStore({ voter: { id: 'u-1', name: 'Ada Lovelace', username: 'ada' } })
     renderNavbar({ store, initialPath: '/sessions/sess_a/lobby' })
 
     await user.click(screen.getByRole('button', { name: /log\s*out/i }))
 
-    // The server call happens first and the Redux slice is cleared after it,
-    // so a resolved promise is what a passing click rests on.
     await waitFor(() => expect(auth.logoutVoter).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('home page')).toBeInTheDocument()
     expect(store.getState().voterAuth.isLoggedIn).toBe(false)
     expect(screen.getAllByRole('link', { name: /sign in/i })).toHaveLength(1)
+  })
+
+  it('keeps the voter signed in and reports the failure when the server refuses', async () => {
+    const user = userEvent.setup()
+    auth.logoutVoter.mockResolvedValue({
+      success: false,
+      status: 500,
+      error: 'INTERNAL_SERVER_ERROR',
+      message: 'An unexpected error occurred during logout.'
+    })
+    const store = makeStore({ voter: { id: 'u-1', name: 'Ada Lovelace', username: 'ada' } })
+    const { container } = renderNavbar({ store, initialPath: '/sessions/sess_a/lobby' })
+
+    await user.click(screen.getByRole('button', { name: /log\s*out/i }))
+
+    // A refusal means the cookie is most likely still live, so the honest state
+    // is the one the server holds: still signed in, with the reason shown.
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('An unexpected error occurred during logout.')
+    expect(store.getState().voterAuth.isLoggedIn).toBe(true)
+    expect(screen.getByText(/hi, /i)).toBeInTheDocument()
+    expect(screen.queryByText('home page')).not.toBeInTheDocument()
+    // The pending state must release on failure too, otherwise the control would
+    // stay disabled and the voter could not retry.
+    expect(screen.getByRole('button', { name: /log\s*out/i })).toBeEnabled()
+    await expectAxeClean(container)
+  })
+
+  it('clears the local state when the server answers that no session remains', async () => {
+    const user = userEvent.setup()
+    auth.logoutVoter.mockResolvedValue({
+      success: false,
+      status: 401,
+      error: 'UNAUTHORIZED',
+      message: 'Authentication required'
+    })
+    const store = makeStore({ voter: { id: 'u-1', name: 'Ada Lovelace', username: 'ada' } })
+    renderNavbar({ store, initialPath: '/sessions/sess_a/lobby' })
+
+    await user.click(screen.getByRole('button', { name: /log\s*out/i }))
+
+    // A 401 is the server saying there is no voter session left, so matching it
+    // locally is the honest state and there is nothing to report: the anonymous
+    // navbar already tells the voter they are signed out. Keeping the local
+    // greeting here would trap them in a session the server refuses.
+    expect(await screen.findByText('home page')).toBeInTheDocument()
+    expect(store.getState().voterAuth.isLoggedIn).toBe(false)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('disables the control and shows a pending state while the logout is in flight', async () => {
+    const user = userEvent.setup()
+    // A deferred promise holds the request open, which is the only way to observe
+    // the in-flight window: a fast stub resolves before the assertion can run.
+    let settleLogout
+    auth.logoutVoter.mockImplementation(
+      () => new Promise((resolve) => { settleLogout = resolve })
+    )
+    renderAsVoter()
+
+    await user.click(screen.getByRole('button', { name: /log\s*out/i }))
+
+    // The control is disabled and says what it is doing, so a slow server cannot
+    // be double clicked into two sign out requests.
+    const pendingButton = await screen.findByRole('button', { name: /signing out/i })
+    expect(pendingButton).toBeDisabled()
+    expect(pendingButton).toHaveAttribute('aria-busy', 'true')
+
+    settleLogout({ success: true, status: 200, error: null, message: null })
+    // On success the voter lands anonymous, so the pending label is gone with it.
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument()
+    )
+  })
+
+  it('cannot be double clicked into two logout requests', async () => {
+    const user = userEvent.setup()
+    let settleLogout
+    auth.logoutVoter.mockImplementation(
+      () => new Promise((resolve) => { settleLogout = resolve })
+    )
+    renderAsVoter()
+
+    await user.click(screen.getByRole('button', { name: /log\s*out/i }))
+    const pendingButton = await screen.findByRole('button', { name: /signing out/i })
+
+    // A second activation during the in-flight window must reach the server
+    // once: the disabled control swallows it and the handler's guard catches
+    // anything that still gets through.
+    await user.click(pendingButton)
+    expect(auth.logoutVoter).toHaveBeenCalledTimes(1)
+
+    settleLogout({ success: true, status: 200, error: null, message: null })
+    await waitFor(() => expect(auth.logoutVoter).toHaveBeenCalledTimes(1))
   })
 })
 

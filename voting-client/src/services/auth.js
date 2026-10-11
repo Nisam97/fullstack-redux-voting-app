@@ -1,4 +1,5 @@
-import { SERVER_URL, socket, ADMIN_TOKEN_KEY, ADMIN_USER_KEY, applyAdminTokenToSocket } from './socket.js';
+import { socket, ADMIN_TOKEN_KEY, ADMIN_USER_KEY, applyAdminTokenToSocket, reattachVoterIdentityToSocket } from './socket.js';
+import { apiRequest } from './api.js';
 
 // Re-exported so existing importers of auth.js keep working. The keys live in
 // socket.js now, because the socket handshake reads them at module load and
@@ -63,53 +64,47 @@ export function isAdminLoggedIn() {
  * @returns {Promise<{ success: boolean, token?: string, user?: Object, error?: string, message?: string }>}
  */
 export async function loginAdmin({ username, email, password }) {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/admin/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        username: username || email,
-        email: email || username,
-        password
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'INVALID_CREDENTIALS',
-        message: data.message || 'Invalid username/email or password.'
-      };
+  // Admin auth is the JWT in the body, not a cookie, but every request to this
+  // app's own server carries credentials so no endpoint can silently depend on
+  // a cookie the client forgot to send. apiRequest sets that centrally.
+  const res = await apiRequest('/api/admin/login', {
+    method: 'POST',
+    body: {
+      username: username || email,
+      email: email || username,
+      password
     }
+  });
 
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
-      if (data.user) {
-        window.localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(data.user));
-      }
-    }
+  const data = res.data || {};
 
-    // The server decides admin vs voter from the socket handshake, so the new
-    // token only takes effect once the socket reconnects with it. Without this
-    // the admin panel keeps showing the voter filtered session list.
-    applyAdminTokenToSocket(data.token);
-
-    return {
-      success: true,
-      token: data.token,
-      user: data.user
-    };
-  } catch (err) {
+  if (!res.ok || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Failed to connect to authentication server.'
+      error: res.networkError ? 'NETWORK_ERROR' : (data.error || 'INVALID_CREDENTIALS'),
+      message: res.networkError
+        ? (res.message || 'Failed to connect to authentication server.')
+        : (data.message || 'Invalid username/email or password.')
     };
   }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+    if (data.user) {
+      window.localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(data.user));
+    }
+  }
+
+  // The server decides admin vs voter from the socket handshake, so the new
+  // token only takes effect once the socket reconnects with it. Without this
+  // the admin panel keeps showing the voter filtered session list.
+  applyAdminTokenToSocket(data.token);
+
+  return {
+    success: true,
+    token: data.token,
+    user: data.user
+  };
 }
 
 /**
@@ -187,68 +182,57 @@ export async function joinVoterSession({ sessionId, displayName }) {
     return { success: false, error: 'INVALID_DISPLAY_NAME', message: 'Display name is required.' };
   }
 
-  try {
-    const response = await fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(sessionId)}/join`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({ displayName: displayName.trim() })
-    });
+  const res = await apiRequest(`/api/sessions/${encodeURIComponent(sessionId)}/join`, {
+    method: 'POST',
+    body: { displayName: displayName.trim() }
+  });
+  const data = res.data || {};
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'JOIN_FAILED',
-        message: data.message || 'Failed to join voting session.'
-      };
-    }
-
-    if (data.status === 'pending_approval') {
-      return {
-        success: true,
-        status: 'pending_approval',
-        requestId: data.requestId,
-        message: data.message || 'Your join request is pending organizer approval.',
-        sessionId
-      };
-    }
-
-    const voterToken = data.voterToken;
-    const voterName = data.displayName;
-
-    if (typeof window !== 'undefined' && voterToken) {
-      const storage = window.sessionStorage || window.localStorage;
-      if (storage) {
-        storage.setItem(getVoterTokenKey(sessionId), voterToken);
-        if (voterName) {
-          storage.setItem(getVoterNameKey(sessionId), voterName);
-        }
-      }
-    }
-
-    if (socket && typeof socket.emit === 'function' && voterToken) {
-      socket.emit('subscribe_session', { sessionId, voterToken });
-    }
-
-    return {
-      success: true,
-      voterToken,
-      displayName: voterName,
-      displayNameSource: data.displayNameSource,
-      voterCount: data.voterCount,
-      sessionId
-    };
-  } catch (err) {
+  if (!res.ok || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Failed to connect to voting server.'
+      error: res.networkError ? 'NETWORK_ERROR' : (data.error || 'JOIN_FAILED'),
+      message: res.networkError
+        ? (res.message || 'Failed to connect to voting server.')
+        : (data.message || 'Failed to join voting session.')
     };
   }
+
+  if (data.status === 'pending_approval') {
+    return {
+      success: true,
+      status: 'pending_approval',
+      requestId: data.requestId,
+      message: data.message || 'Your join request is pending organizer approval.',
+      sessionId
+    };
+  }
+
+  const voterToken = data.voterToken;
+  const voterName = data.displayName;
+
+  if (typeof window !== 'undefined' && voterToken) {
+    const storage = window.sessionStorage || window.localStorage;
+    if (storage) {
+      storage.setItem(getVoterTokenKey(sessionId), voterToken);
+      if (voterName) {
+        storage.setItem(getVoterNameKey(sessionId), voterName);
+      }
+    }
+  }
+
+  if (socket && typeof socket.emit === 'function' && voterToken) {
+    socket.emit('subscribe_session', { sessionId, voterToken });
+  }
+
+  return {
+    success: true,
+    voterToken,
+    displayName: voterName,
+    displayNameSource: data.displayNameSource,
+    voterCount: data.voterCount,
+    sessionId
+  };
 }
 
 /**
@@ -277,35 +261,27 @@ export function clearVoterSession(sessionId) {
  * @returns {Promise<{ success: boolean, message?: string, error?: string, retryAfterSeconds?: number }>}
  */
 export async function requestOtp({ email, name, username }) {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/auth/otp/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, name, username })
-    });
+  const res = await apiRequest('/api/auth/otp/request', {
+    method: 'POST',
+    body: { email, name, username }
+  });
+  const data = res.data || {};
 
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'OTP_REQUEST_FAILED',
-        message: data.message || 'Failed to request verification code.',
-        retryAfterSeconds: data.retryAfterSeconds
-      };
-    }
-
-    return {
-      success: true,
-      message: data.message
-    };
-  } catch (err) {
+  if (!res.ok || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Failed to connect to authentication server.'
+      error: res.networkError ? 'NETWORK_ERROR' : (data.error || 'OTP_REQUEST_FAILED'),
+      message: res.networkError
+        ? (res.message || 'Failed to connect to authentication server.')
+        : (data.message || 'Failed to request verification code.'),
+      retryAfterSeconds: data.retryAfterSeconds
     };
   }
+
+  return {
+    success: true,
+    message: data.message
+  };
 }
 
 /**
@@ -318,36 +294,28 @@ export async function requestOtp({ email, name, username }) {
  * @returns {Promise<{ success: boolean, user?: Object, isNewUser?: boolean, error?: string, message?: string }>}
  */
 export async function verifyOtp({ email, code }) {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/auth/otp/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, code })
-    });
+  const res = await apiRequest('/api/auth/otp/verify', {
+    method: 'POST',
+    body: { email, code }
+  });
+  const data = res.data || {};
 
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'VERIFY_FAILED',
-        message: data.message || 'Failed to verify code.',
-        remainingAttempts: data.remainingAttempts
-      };
-    }
-
-    return {
-      success: true,
-      user: data.user,
-      isNewUser: data.isNewUser
-    };
-  } catch (err) {
+  if (!res.ok || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Failed to connect to authentication server.'
+      error: res.networkError ? 'NETWORK_ERROR' : (data.error || 'VERIFY_FAILED'),
+      message: res.networkError
+        ? (res.message || 'Failed to connect to authentication server.')
+        : (data.message || 'Failed to verify code.'),
+      remainingAttempts: data.remainingAttempts
     };
   }
+
+  return {
+    success: true,
+    user: data.user,
+    isNewUser: data.isNewUser
+  };
 }
 
 /**
@@ -356,30 +324,20 @@ export async function verifyOtp({ email, code }) {
  * @returns {Promise<{ success: boolean, user?: Object, error?: string }>}
  */
 export async function getVoterProfile() {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/auth/voter/me`, {
-      method: 'GET',
-      credentials: 'include'
-    });
+  const res = await apiRequest('/api/auth/voter/me');
+  const data = res.data;
 
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'UNAUTHORIZED'
-      };
-    }
-
-    return {
-      success: true,
-      user: data.user
-    };
-  } catch {
+  if (!res.ok || !data || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR'
+      error: res.networkError ? 'NETWORK_ERROR' : ((data && data.error) || 'UNAUTHORIZED')
     };
   }
+
+  return {
+    success: true,
+    user: data.user
+  };
 }
 
 /**
@@ -391,53 +349,73 @@ export async function getVoterProfile() {
  * @returns {Promise<{ success: boolean, user?: Object, error?: string, message?: string }>}
  */
 export async function updateVoterProfile({ name, username }) {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/auth/profile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ name, username })
-    });
+  const res = await apiRequest('/api/auth/profile', {
+    method: 'POST',
+    body: { name, username }
+  });
+  const data = res.data || {};
 
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || 'UPDATE_FAILED',
-        message: data.message || 'Failed to update profile.'
-      };
-    }
-
-    return {
-      success: true,
-      user: data.user
-    };
-  } catch (err) {
+  if (!res.ok || !data.success) {
     return {
       success: false,
-      error: 'NETWORK_ERROR',
-      message: err.message || 'Failed to connect to server.'
+      error: res.networkError ? 'NETWORK_ERROR' : (data.error || 'UPDATE_FAILED'),
+      message: res.networkError
+        ? (res.message || 'Failed to connect to server.')
+        : (data.message || 'Failed to update profile.')
     };
   }
+
+  return {
+    success: true,
+    user: data.user
+  };
 }
 
 /**
  * Logs out the voter by clearing the vs_voter cookie on the backend.
  *
- * @returns {Promise<{ success: boolean }>}
+ * On success the socket re-handshakes, the mirror of what
+ * `applyAdminTokenToSocket(null)` does for admin logout. The server derived the
+ * voter identity from the cookie when this socket first connected, so clearing
+ * the cookie alone leaves the old identity on the connection; only a fresh
+ * handshake drops it. A failed logout deliberately does not reconnect, because
+ * the cookie is still set and a new handshake would just re-adopt the identity
+ * the voter asked to leave.
+ *
+ * @returns {Promise<{ success: boolean, status: number, error: string|null, message: string|null }>}
  */
 export async function logoutVoter() {
-  try {
-    const response = await fetch(`${SERVER_URL}/api/auth/logout`, {
-      method: 'POST',
-      credentials: 'include'
-    });
+  const res = await apiRequest('/api/auth/logout', { method: 'POST' });
 
-    const data = await response.json().catch(() => ({}));
-    return {
-      success: response.ok && Boolean(data.success)
-    };
-  } catch {
-    return { success: false };
+  const success = res.ok && Boolean(res.data && res.data.success);
+  if (success) {
+    reattachVoterIdentityToSocket();
+    return { success: true, status: res.status, error: null, message: null };
   }
+
+  // No response at all, so nothing is known about the cookie: status 0 marks
+  // "the request never landed" rather than an HTTP verdict.
+  if (res.networkError) {
+    return {
+      success: false,
+      status: 0,
+      error: 'NETWORK_ERROR',
+      message: res.message
+        ? `Could not reach the voting server: ${res.message}`
+        : 'Could not reach the voting server.'
+    };
+  }
+
+  // A refused logout leaves the vs_voter cookie in place, so the caller must
+  // not treat this as a completed sign out: clearing local voter state here
+  // would render a signed out navbar while the server still honours the
+  // cookie. Report the status and the server's own words so the surface can
+  // say what happened, and so a 401 (there is no live voter session to keep)
+  // can be told apart from a failure that leaves the state unknown.
+  return {
+    success: false,
+    status: res.status,
+    error: (res.data && res.data.error) || 'LOGOUT_FAILED',
+    message: (res.data && res.data.message) || 'The server could not complete the sign out.'
+  };
 }

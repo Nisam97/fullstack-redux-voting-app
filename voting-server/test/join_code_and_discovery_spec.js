@@ -151,7 +151,8 @@ describe('Phase 2: Join Code and Discovery (Spec 0002)', function () {
         name: 'Best Movie 2026',
         status: 'pending',
         sessionType: 'public',
-        votingMode: 'single_ballot'
+        votingMode: 'single_ballot',
+        whoCanJoin: 'public'
       });
     });
 
@@ -228,13 +229,42 @@ describe('Phase 2: Join Code and Discovery (Spec 0002)', function () {
 
       const res = await httpGet(`/api/join/${testCode}`);
       expect(res.statusCode).to.equal(200);
+      // whoCanJoin was added after AC-9 so the client can seed the lobby with
+      // the eligibility mode it needs to render the sign in wall and join form
+      // without a second, gated lobby read (spec 0008 AC-14). It carries the
+      // mode only, never an allowlist email or participant detail.
       expect(res.body).to.deep.equal({
         sessionId: 'sess_secured',
         name: 'Private Board Vote',
         status: 'pending',
         sessionType: 'secured',
-        votingMode: 'single_ballot'
+        votingMode: 'single_ballot',
+        whoCanJoin: 'allowlist'
       });
+    });
+
+    it('returns the approval mode for a secured session, never any roster detail', async () => {
+      const testCode = 'SECU02';
+      await Session.create({
+        sessionId: 'sess_approval',
+        title: 'Approval Board Vote',
+        entries: ['A', 'B'],
+        status: 'pending',
+        type: 'secured',
+        whoCanJoin: 'approval',
+        votingMode: 'single_ballot',
+        joinCode: testCode
+      });
+
+      const res = await httpGet(`/api/join/${testCode}`);
+      expect(res.statusCode).to.equal(200);
+      expect(res.body.whoCanJoin).to.equal('approval');
+      expect(res.body.sessionType).to.equal('secured');
+      // The resolver answers a capability question, so the mode is fair game,
+      // but no participant or allowlist data may ride along.
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.to.contain('@');
+      expect(serialized).not.to.contain('allowlist');
     });
 
     it('returns 404 for expired session past pendingExpiresAt', async () => {

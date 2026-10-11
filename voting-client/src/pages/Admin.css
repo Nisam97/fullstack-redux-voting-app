@@ -6,10 +6,16 @@
   font-family: inherit;
 }
 
+/* The navbar is `position: fixed`, so it takes no space in the document flow
+   and sits on top of whatever renders first in `main`. With the old 2rem top
+   padding the admin header row landed underneath the bar, which does not just
+   hide it: a click there hit-tests through to the navbar, and the button's own
+   area overlaps Logout, so using it signed the admin out. Reserve the navbar's
+   height (92px) plus a normal gap before the header starts. */
 .admin-main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem 1.5rem;
+  padding: 7rem 1.5rem 4rem 1.5rem;
 }
 
 /* Header & Controls */

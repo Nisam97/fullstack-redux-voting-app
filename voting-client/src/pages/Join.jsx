@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
+import { useDispatch } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
-import { SERVER_URL } from "../services/socket";
+import { apiRequest } from "../services/api";
+import { lobbyUpdate } from "../redux/voteSlice";
 import { KeyRound, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import "./Join.css";
 
 function Join() {
   const { code: urlCode } = useParams();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const [code, setCode] = useState(() => {
     if (urlCode && typeof urlCode === "string") {
@@ -31,15 +34,42 @@ function Join() {
     setError(null);
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/join/${encodeURIComponent(normalized)}`);
-      const data = await response.json().catch(() => ({}));
+      // apiRequest owns credentials, the admin header, and transport error
+      // handling for every own-server call. The resolver is public, so it needs
+      // no body and no special headers.
+      const res = await apiRequest(`/api/join/${encodeURIComponent(normalized)}`);
+      const data = res.data || {};
 
-      if (response.ok && data && data.sessionId) {
+      if (!res.networkError && res.ok && data.sessionId) {
+        // A secured session's lobby read is gated on the server (spec 0008
+        // AC-14), so a signed in voter who is not an approved participant yet
+        // gets a `404` and the lobby renders its neutral not available state.
+        // The join code is the capability the admin hands out, so the resolver
+        // metadata is the seed the lobby needs to render the secured sign in
+        // wall and join form. Without it an approval mode voter can never file
+        // the request the admin is waiting for, and an allowlisted voter never
+        // reaches the join form either.
+        if (data.sessionType === "secured") {
+          dispatch(lobbyUpdate({
+            sessionId: data.sessionId,
+            title: data.name || "",
+            status: data.status,
+            sessionType: "secured",
+            type: "secured",
+            // Resolver responses from before this field existed omit it, and
+            // the lobby's own fallback is the allowlist, so match it here.
+            whoCanJoin: data.whoCanJoin || "allowlist"
+          }));
+        }
         navigate(`/sessions/${encodeURIComponent(data.sessionId)}/lobby`);
-      } else if (response.status === 429) {
+      } else if (res.status === 429) {
         setError(data.error || "Too many requests, please wait.");
-      } else if (response.status === 503) {
+      } else if (res.status === 503) {
         setError(data.error || "Service temporarily unavailable.");
+      } else if (res.networkError) {
+        // A transport failure is not a verdict on the code, so it keeps its own
+        // honest message rather than borrowing "code not found".
+        setError("Unable to reach voting server. Please check your connection.");
       } else {
         setError(data.error || "Code not found or no longer active.");
       }
@@ -48,7 +78,7 @@ function Join() {
     } finally {
       setIsResolving(false);
     }
-  }, [navigate]);
+  }, [navigate, dispatch]);
 
   // Auto-resolve when accessed via /join/:code
   useEffect(() => {

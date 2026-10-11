@@ -11,7 +11,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  /* The navbar is `position: fixed`, so it covers the top of `main`. Reserve
+     its height (a constant 92px, the budget Admin.css and
+     admin_navbar_clearance_spec.js use) above the centered content, otherwise
+     the first block (session title / status card) is clipped under the bar.
+     The asymmetric top padding also absorbs upward flex-centering overflow. */
+  padding: 7rem 20px 60px;
 }
 
 .voting-container {

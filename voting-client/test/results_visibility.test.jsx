@@ -650,10 +650,11 @@ describe('History archive row for a completed session with no winner (AC-5)', ()
   })
 })
 
-// The archive type badge (spec 0008 AC-9, AC-10). The listing is not voter
-// scoped, so the badge must describe the session and never the reader. These
-// cases pin that, and they are the automated half of the "vary the viewer" step
-// the /check verify record left open.
+// The archive type badge (spec 0008 AC-9, AC-10). The listing is now caller
+// aware, but the type badge still describes the session's own type and never the
+// reader, so an outsider is told nothing extra. These cases pin that, and they
+// are the automated half of the "vary the viewer" step the /check verify record
+// left open.
 describe('History archive type badge (AC-9, AC-10)', () => {
   const SECURED_ROW = {
     sessionId: 'sec_archive_1',
@@ -779,6 +780,392 @@ describe('History archive type badge (AC-9, AC-10)', () => {
     await screen.findByText('Closed Board Election')
 
     expect(document.body.textContent).not.toContain('@')
+  })
+})
+
+// Participant visibility versus public publication (spec 0008 AC-5). The archive
+// lists an unpublished secured result only for its participants and the admin, so
+// a viewer holding one is looking at their own private outcome. The card has to
+// say which state it is, so a participant can tell a private result apart from
+// one the admin has published to everyone.
+describe('History archive participant visibility badge (AC-5)', () => {
+  const PRIVATE_ROW = {
+    sessionId: 'sec_private_1',
+    title: 'Members Only Ballot',
+    winner: 'Beta',
+    entries: ['Alpha', 'Beta'],
+    completedAt: '2026-10-10T10:00:00.000Z',
+    type: 'secured',
+    publishResultsPublicly: false
+  }
+
+  const PUBLISHED_ROW = {
+    ...PRIVATE_ROW,
+    sessionId: 'sec_published_1',
+    title: 'Published Board Result',
+    publishResultsPublicly: true
+  }
+
+  const PUBLIC_ROW = {
+    sessionId: 'pub_open_1',
+    title: 'Open Town Hall',
+    winner: 'Alpha',
+    entries: ['Alpha', 'Beta'],
+    completedAt: '2026-10-10T10:00:00.000Z',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  function renderArchive(rows, store = makeStore()) {
+    vi.mocked(fetchSessionHistory).mockResolvedValue({ success: true, results: rows })
+    return render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/history']}>
+          <Routes>
+            <Route path="/history" element={<History />} />
+            <Route path="/sessions/:id/results" element={<div>results page</div>} />
+            <Route path="/sessions" element={<div>sessions page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    )
+  }
+
+  it('marks an unpublished secured row as Participants only', async () => {
+    // covers: AC-5
+    renderArchive([PRIVATE_ROW])
+
+    await screen.findByText('Members Only Ballot')
+
+    expect(screen.getByTestId('history-visibility-badge')).toHaveTextContent('Participants only')
+  })
+
+  it('marks a published secured row as Published', async () => {
+    // covers: AC-5
+    renderArchive([PUBLISHED_ROW])
+
+    await screen.findByText('Published Board Result')
+
+    expect(screen.getByTestId('history-visibility-badge')).toHaveTextContent('Published')
+  })
+
+  it('shows no visibility badge on a public row, which is public for everyone', async () => {
+    // covers: AC-5
+    renderArchive([PUBLIC_ROW])
+
+    await screen.findByText('Open Town Hall')
+
+    expect(screen.queryByTestId('history-visibility-badge')).not.toBeInTheDocument()
+  })
+
+  it('tells the two secured states apart on the same page', async () => {
+    // covers: AC-5
+    renderArchive([PRIVATE_ROW, PUBLISHED_ROW])
+
+    await screen.findByText('Members Only Ballot')
+    await screen.findByText('Published Board Result')
+
+    const labels = screen.getAllByTestId('history-visibility-badge').map((b) => b.textContent)
+    expect(labels).toEqual(['Participants only', 'Published'])
+  })
+
+  it('carries the state in text, not only in the icon or its colour', async () => {
+    // covers: AC-5
+    renderArchive([PRIVATE_ROW])
+
+    await screen.findByText('Members Only Ballot')
+
+    const badge = screen.getByTestId('history-visibility-badge')
+    expect(badge).toHaveTextContent('Participants only')
+    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('reads an absent publish flag as unpublished, the same default the server applies', async () => {
+    // covers: AC-5
+    // A row from a payload that predates the flag must never be announced as
+    // published. Reading a missing flag as published is the one direction that
+    // would tell a participant a private result is public.
+    renderArchive([{ ...PRIVATE_ROW, publishResultsPublicly: undefined }])
+
+    await screen.findByText('Members Only Ballot')
+
+    expect(screen.getByTestId('history-visibility-badge')).toHaveTextContent('Participants only')
+  })
+})
+
+// The visibility filter (spec 0008 AC-5). The archive lists public results plus
+// the caller's own private ones, so a participant can narrow to either. The
+// filter narrows what the server already sent and never widens it, and it only
+// appears when there is a genuine choice to make.
+describe('History visibility filter (AC-5)', () => {
+  const PRIVATE_ROW = {
+    sessionId: 'sec_member_1',
+    title: 'Members Only Budget Vote',
+    winner: 'Beta',
+    entries: ['Alpha', 'Beta'],
+    completedAt: '2026-10-10T10:00:00.000Z',
+    type: 'secured',
+    publishResultsPublicly: false
+  }
+
+  const PUBLISHED_SECURED_ROW = {
+    ...PRIVATE_ROW,
+    sessionId: 'sec_public_1',
+    title: 'Published Board Result',
+    publishResultsPublicly: true
+  }
+
+  const PUBLIC_ROW = {
+    ...PRIVATE_ROW,
+    sessionId: 'pub_open_1',
+    title: 'Open Town Hall',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  function renderArchive(rows, store = makeStore()) {
+    vi.mocked(fetchSessionHistory).mockResolvedValue({ success: true, results: rows })
+    return render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/history']}>
+          <Routes>
+            <Route path="/history" element={<History />} />
+            <Route path="/sessions/:id/results" element={<div>results page</div>} />
+            <Route path="/sessions" element={<div>sessions page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    )
+  }
+
+  const filterButton = (name) => screen.getByRole('button', { name })
+
+  it('offers All, Private and Published with counts when both kinds are present', async () => {
+    // covers: AC-5
+    renderArchive([PRIVATE_ROW, PUBLISHED_SECURED_ROW, PUBLIC_ROW])
+
+    await screen.findByText('Members Only Budget Vote')
+
+    expect(filterButton('All (3)')).toBeInTheDocument()
+    expect(filterButton('Private (1)')).toBeInTheDocument()
+    expect(filterButton('Published (2)')).toBeInTheDocument()
+  })
+
+  it('stays hidden when every row is public', async () => {
+    // covers: AC-5
+    renderArchive([PUBLISHED_SECURED_ROW, PUBLIC_ROW])
+
+    await screen.findByText('Published Board Result')
+
+    expect(screen.queryByRole('group', { name: 'Filter results by visibility' })).not.toBeInTheDocument()
+  })
+
+  it('stays hidden when every row is private', async () => {
+    // covers: AC-5
+    renderArchive([PRIVATE_ROW])
+
+    await screen.findByText('Members Only Budget Vote')
+
+    expect(screen.queryByRole('group', { name: 'Filter results by visibility' })).not.toBeInTheDocument()
+  })
+
+  it('narrows to the private rows and back to all', async () => {
+    // covers: AC-5
+    const user = userEvent.setup()
+    renderArchive([PRIVATE_ROW, PUBLISHED_SECURED_ROW, PUBLIC_ROW])
+    await screen.findByText('Members Only Budget Vote')
+
+    await user.click(filterButton('Private (1)'))
+
+    expect(screen.getByText('Members Only Budget Vote')).toBeInTheDocument()
+    expect(screen.queryByText('Published Board Result')).not.toBeInTheDocument()
+    expect(screen.queryByText('Open Town Hall')).not.toBeInTheDocument()
+
+    await user.click(filterButton('All (3)'))
+
+    expect(screen.getByText('Members Only Budget Vote')).toBeInTheDocument()
+    expect(screen.getByText('Published Board Result')).toBeInTheDocument()
+    expect(screen.getByText('Open Town Hall')).toBeInTheDocument()
+  })
+
+  it('groups a published secured row with a public row under Published', async () => {
+    // covers: AC-5
+    const user = userEvent.setup()
+    renderArchive([PRIVATE_ROW, PUBLISHED_SECURED_ROW, PUBLIC_ROW])
+    await screen.findByText('Members Only Budget Vote')
+
+    await user.click(filterButton('Published (2)'))
+
+    expect(screen.queryByText('Members Only Budget Vote')).not.toBeInTheDocument()
+    expect(screen.getByText('Published Board Result')).toBeInTheDocument()
+    expect(screen.getByText('Open Town Hall')).toBeInTheDocument()
+  })
+
+  it('reports the active option through aria-pressed', async () => {
+    // covers: AC-5
+    const user = userEvent.setup()
+    renderArchive([PRIVATE_ROW, PUBLISHED_SECURED_ROW, PUBLIC_ROW])
+    await screen.findByText('Members Only Budget Vote')
+
+    expect(filterButton('All (3)')).toHaveAttribute('aria-pressed', 'true')
+    expect(filterButton('Private (1)')).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(filterButton('Private (1)'))
+
+    expect(filterButton('Private (1)')).toHaveAttribute('aria-pressed', 'true')
+    expect(filterButton('All (3)')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('never counts a public row as private', async () => {
+    // covers: AC-5
+    // The private set is keyed off the secured type, not the publish flag alone,
+    // so a public row can never be pulled into Private.
+    renderArchive([PUBLIC_ROW, PRIVATE_ROW])
+
+    await screen.findByText('Members Only Budget Vote')
+
+    expect(filterButton('Private (1)')).toBeInTheDocument()
+    expect(filterButton('Published (1)')).toBeInTheDocument()
+  })
+})
+
+// Archive ordering. Newest first is the server's own order and the default, and
+// the two extra choices let a viewer put the champion name or the candidate
+// count in charge instead. Ordering is independent of the visibility filter.
+describe('History archive sorting', () => {
+  const OLDEST = {
+    sessionId: 'sort_old_2',
+    title: 'Older Small Vote',
+    winner: 'Zeta',
+    entries: ['Zeta', 'Alpha'],
+    completedAt: '2026-10-01T10:00:00.000Z',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  const MIDDLE = {
+    sessionId: 'sort_mid_3',
+    title: 'Middle Medium Vote',
+    winner: 'Alpha',
+    entries: ['Alpha', 'Beta', 'Gamma'],
+    completedAt: '2026-10-05T10:00:00.000Z',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  const NEWEST = {
+    sessionId: 'sort_new_1',
+    title: 'Newest Tiny Vote',
+    winner: 'Mu',
+    entries: ['Mu'],
+    completedAt: '2026-10-09T10:00:00.000Z',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  const NO_CHAMPION = {
+    sessionId: 'sort_none',
+    title: 'Deadlocked Vote',
+    winner: null,
+    entries: ['Alpha', 'Beta', 'Gamma', 'Delta'],
+    completedAt: '2026-10-07T10:00:00.000Z',
+    type: 'public',
+    publishResultsPublicly: true
+  }
+
+  const PRIVATE_ALPHA = {
+    sessionId: 'p_alpha',
+    title: 'Private Alpha Vote',
+    winner: 'Alpha',
+    entries: ['Alpha', 'B'],
+    completedAt: '2026-10-02T10:00:00.000Z',
+    type: 'secured',
+    publishResultsPublicly: false
+  }
+
+  const PRIVATE_BETA = {
+    sessionId: 'p_beta',
+    title: 'Private Beta Vote',
+    winner: 'Beta',
+    entries: ['Beta', 'A', 'C'],
+    completedAt: '2026-10-03T10:00:00.000Z',
+    type: 'secured',
+    publishResultsPublicly: false
+  }
+
+  function renderArchive(rows, store = makeStore()) {
+    vi.mocked(fetchSessionHistory).mockResolvedValue({ success: true, results: rows })
+    return render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/history']}>
+          <Routes>
+            <Route path="/history" element={<History />} />
+            <Route path="/sessions/:id/results" element={<div>results page</div>} />
+            <Route path="/sessions" element={<div>sessions page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    )
+  }
+
+  const titleOrder = () => screen.getAllByTestId('history-item-title').map((h) => h.textContent)
+
+  it('has no sort control for a single result', async () => {
+    renderArchive([NEWEST])
+    await screen.findByText('Newest Tiny Vote')
+
+    expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument()
+  })
+
+  it('orders newest first by default, whatever order the server sent', async () => {
+    renderArchive([MIDDLE, NEWEST, OLDEST])
+
+    await screen.findByText('Newest Tiny Vote')
+
+    expect(screen.getByLabelText('Sort')).toHaveValue('date')
+    expect(titleOrder()).toEqual(['Newest Tiny Vote', 'Middle Medium Vote', 'Older Small Vote'])
+  })
+
+  it('sorts champions A to Z and puts a session with no champion last', async () => {
+    const user = userEvent.setup()
+    renderArchive([NEWEST, OLDEST, MIDDLE, NO_CHAMPION])
+    await screen.findByText('Newest Tiny Vote')
+
+    await user.selectOptions(screen.getByLabelText('Sort'), 'champion')
+
+    expect(titleOrder()).toEqual([
+      'Middle Medium Vote',
+      'Newest Tiny Vote',
+      'Older Small Vote',
+      'Deadlocked Vote'
+    ])
+  })
+
+  it('sorts by candidate count, most candidates first', async () => {
+    const user = userEvent.setup()
+    renderArchive([MIDDLE, NEWEST, OLDEST, NO_CHAMPION])
+    await screen.findByText('Newest Tiny Vote')
+
+    await user.selectOptions(screen.getByLabelText('Sort'), 'candidates')
+
+    expect(titleOrder()).toEqual([
+      'Deadlocked Vote',
+      'Middle Medium Vote',
+      'Older Small Vote',
+      'Newest Tiny Vote'
+    ])
+  })
+
+  it('reorders the filtered view, so the two controls compose', async () => {
+    const user = userEvent.setup()
+    renderArchive([MIDDLE, NEWEST, OLDEST, PRIVATE_ALPHA, PRIVATE_BETA])
+    await screen.findByText('Newest Tiny Vote')
+
+    await user.click(screen.getByRole('button', { name: 'Private (2)' }))
+    expect(titleOrder()).toEqual(['Private Beta Vote', 'Private Alpha Vote'])
+
+    await user.selectOptions(screen.getByLabelText('Sort'), 'champion')
+    expect(titleOrder()).toEqual(['Private Alpha Vote', 'Private Beta Vote'])
   })
 })
 

@@ -29,7 +29,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Accounts and OTP | Phase 6 | done |
 | 8 | Secured sessions | Phase 7 | done |
 | 9 | Visibility and privacy | Phase 8 | done |
-| 10 | Hardening and docs | Phase 9 | in-progress |
+| 10 | Hardening and docs | Phase 9 | done |
 | 11 | Lobby existence gate | Phase 9 | done |
 
 ---
@@ -214,8 +214,8 @@ spec [0007](../specs/0007-secured-sessions/index.md) · code in `voting-server/s
 ## Phase 8: Visibility and Privacy
 
 ### 9. Visibility and privacy · GA · done
-Enforce the results visibility matrix: public session results are visible to all; secured session results are visible only to approved participants (signed in) and the admin; `GET /api/sessions/history` returns public sessions and published secured results only. Add the admin per-session Publish results publicly toggle (`SET_PUBLISH_RESULTS` socket action). Admin can see per-round turnout (who voted per round, not for whom) in the admin panel. Ensure emails and allowlists never reach voter-facing REST or socket payloads at any point.
-**Done when:** the visibility matrix is fully tested; the publish toggle flips a secured result into `/history`; an unpublished secured result is absent from `/history`; per-round turnout is visible only to the admin; no voter-facing payload contains an email.
+Enforce the results visibility matrix: public session results are visible to all; secured session results are visible only to approved participants (signed in) and the admin; `GET /api/sessions/history` is caller aware, so a public or published secured result is listed for everyone and an unpublished secured result is listed only for its approved participants and the admin. Add the admin per-session Publish results publicly toggle (`SET_PUBLISH_RESULTS` socket action). Admin can see per-round turnout (who voted per round, not for whom) in the admin panel. Ensure emails and allowlists never reach voter-facing REST or socket payloads at any point.
+**Done when:** the visibility matrix is fully tested; the publish toggle flips a secured result into `/history` for everyone; an unpublished secured result is listed for an approved participant without being published and is absent from `/history` for every other caller; per-round turnout is visible only to the admin; no voter-facing payload contains an email.
 spec [0008](../specs/0008-visibility-and-privacy/index.md)
 - [x] Design it (spec): `/architect visibility and privacy`
 - [x] Build it: `/develop visibility and privacy`
@@ -241,7 +241,7 @@ spec [0008](../specs/0008-visibility-and-privacy/index.md)
 
 ## Phase 9: Hardening and Docs
 
-### 10. Hardening and docs · in-progress
+### 10. Hardening and docs · done
 Add rate limits on `POST /api/auth/otp/request` (5 req/hour/email, 20/hour/IP) and `GET /api/join/:code` (30/min/IP). Enforce timing parity on OTP and join-code responses so guessing yields no timing signal. Accessibility pass (WCAG 2.1 AA on voting and lobby screens). Update `README`, `ARCHITECTURE.md`, `API_CONTRACT.md`, and `USER_MANUAL.md` for v2. Run all suites, lint, and build.
 **Done when:** rate limits are enforced and tested; OTP and join code responses have similar timing; axe reports no critical accessibility violations on voting screens; all suites pass; lint and build are green.
 - [x] Build it: `/develop hardening and docs`

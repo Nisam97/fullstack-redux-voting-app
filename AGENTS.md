@@ -35,6 +35,10 @@ cd voting-server && npm test   # Mocha via test/runner.cjs
 
 Stored in `docs/specs/`. Older specs are a single file, `docs/specs/NNNN-title.md`; newer ones are a directory, `docs/specs/NNNN-title/`, holding `index.md`, often `rationale.md`, and a `verify.md` written by `/check verify` that carries the runtime record per acceptance criterion. Long form design notes live in `docs/`.
 
+## Reviews
+
+- [REVIEW_STATE.md](docs/reviews/REVIEW_STATE.md): review verdicts for this branch's hardening and contract-table rollout.
+
 ## Rules
 
 - The server is authoritative. Voting math, tallies, timers, and round advancement run only on the backend; the client renders state and emits intent, never computing quorum or dispatching `NEXT` on its own.
@@ -47,7 +51,7 @@ Stored in `docs/specs/`. Older specs are a single file, `docs/specs/NNNN-title.m
 - Sessions come in two types. `public` is open, `secured` requires `whoCanJoin` set to `allowlist` (admin pastes emails) or `approval` (voters request, admin decides). `public` is rejected for a secured session at `CREATE_SESSION`.
 - Secured sessions are hidden from voter facing broadcasts and the join code resolver returns only summary metadata for them, never allowlist or participant detail.
 - `VoteParticipation` records who voted in each round as an audit trail for the admin turnout view. It stores the voter and the round only, never the vote choice.
-- Result visibility is one matrix, decided only on the backend by `resolveResultVisibility`. A public result is visible to everyone; a secured result is visible only to the admin and its approved participants until the admin publishes it. Reads fail closed: a result whose type cannot be resolved is gated as secured, never public. `Result.type` mirrors `Session.type`, and a startup backfill fills legacy rows.
+- Result visibility is one matrix, decided only on the backend by `resolveResultVisibility`. A public result is visible to everyone; a secured result is visible only to the admin and its approved participants until the admin publishes it. The read includes the history listing, which resolves each completed row through the same matrix, so an approved participant reads a concluded secured result in their history without the admin publishing it. Public publication, becoming visible to everyone including the history archive, stays the separate `SET_PUBLISH_RESULTS` action. Reads fail closed: a result whose type cannot be resolved is gated as secured, never public. `Result.type` mirrors `Session.type`, and a startup backfill fills legacy rows.
 - No read may confirm that a gated secured session exists. A caller who may not see it gets the same status and the same body an unknown id gets, on every path that serves session metadata, and the client renders one neutral not available state for every such 404 rather than copy that claims the session is gone.
 - `VOTER_JWT_SECRET` is required in production. Startup calls `validateVoterJwtSecret()` and a missing value is a warning in development but a thrown error in production.
 - Duplicate votes are blocked on the composite key `${sessionId}:::${roundId}:::${sortedPair}:::${voterToken}` (pair is sorted, `roundId` is the monotonic identity `${sessionId}:::r${roundIndex}`). Scoping the key per round means a pair that meets again after a tie accepts fresh votes. A callback for an older round is stale and ignored.

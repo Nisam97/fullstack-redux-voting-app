@@ -61,6 +61,14 @@ export const ALLOWED_ACTION_TYPES = new Set([
 ]);
 
 /**
+ * Candidate cap for the history read. The listing runs the shared visibility
+ * matrix over this many newest completed results, then returns the visible
+ * subset, so a participant's unpublished secured row is still considered even
+ * when the newest candidates are public.
+ */
+export const HISTORY_CANDIDATE_LIMIT = 500;
+
+/**
  * Parses the allowed CORS origins from environment configuration.
  * Comma separated list in CORS_ALLOWED_ORIGINS; defaults to the local dev client.
  * The wildcard '*' disables origin checking entirely (development only).
@@ -1850,17 +1858,33 @@ export default function startServer(store, port = 8090) {
             return;
           }
 
+          const resolvedSessionType = deriveSessionType({
+            type: sessionDoc.type,
+            sessionType: sessionDoc.sessionType,
+            whoCanJoin: sessionDoc.whoCanJoin,
+            resolved: true
+          });
           await respond(200, {
             sessionId: sessionDoc.sessionId,
             name: sessionDoc.title || '',
             status: sessionDoc.status,
-            sessionType: deriveSessionType({
-              type: sessionDoc.type,
-              sessionType: sessionDoc.sessionType,
-              whoCanJoin: sessionDoc.whoCanJoin,
-              resolved: true
-            }),
-            votingMode: sessionDoc.votingMode || 'tournament'
+            sessionType: resolvedSessionType,
+            votingMode: sessionDoc.votingMode || 'tournament',
+            // The eligibility mode, never the roster. The client seeds the
+            // lobby with this metadata so a secured session can render its
+            // sign in wall and join form without a second, gated lobby read
+            // (spec 0008 AC-14). Holders of the join code are already trusted
+            // with the session's existence; allowlist emails and participant
+            // detail are still never served here.
+            //
+            // A secured session cannot legitimately declare `public`, but the
+            // Session schema defaults the column to `public`, so a legacy
+            // secured row created without a mode would otherwise report public.
+            // Fall back to the allowlist for a secured session, matching the
+            // gate's own fail closed default.
+            whoCanJoin: resolvedSessionType === 'secured'
+              ? (sessionDoc.whoCanJoin && sessionDoc.whoCanJoin !== 'public' ? sessionDoc.whoCanJoin : 'allowlist')
+              : 'public'
           });
           return;
         } catch (err) {
@@ -2053,22 +2077,44 @@ export default function startServer(store, port = 8090) {
         }
 
         try {
-          const limit = url.searchParams.get('limit') || 50;
-          const results = await repository.getCompletedResults(limit);
+          const parsedLimit = parseInt(url.searchParams.get('limit'), 10);
+          const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
+
+          // Participant result visibility is separate from public publication.
+          // The repository supplies completed candidates; the shared visibility
+          // matrix decides which of them this caller may see, the same decision
+          // the result and rounds reads make. A public result and a published
+          // secured result are listed for everyone, while an unpublished secured
+          // result is listed only for the admin and its approved participants.
+          // An approved participant therefore reads a concluded secured
+          // tournament from their own history without the admin publishing it,
+          // and an anonymous or non participant caller still never sees the row,
+          // so publishing stays a separate admin action (SET_PUBLISH_RESULTS)
+          // that alone makes the result public.
+          const adminToken = getAdminTokenFromRequest(req);
+          const voterCookie = getVoterTokenFromRequest(req);
+          const candidates = await repository.getCompletedResults(HISTORY_CANDIDATE_LIMIT);
+
           // Spec 0008 AC-9: the archive carries the session type, so an admin
-          // can tell a published secured result from a public one in the
-          // listing instead of only on the result page. The filter above only
-          // admits `type: 'public'` or a published secured row, so a legacy row
-          // that never got backfilled stays out of the archive rather than
-          // showing up with a type nobody can trust.
-          const formattedResults = results.map(r => ({
-            sessionId: r.sessionId,
-            title: r.title || '',
-            winner: r.winner,
-            entries: r.entries,
-            completedAt: r.completedAt,
-            type: r.type === 'secured' ? 'secured' : 'public'
-          }));
+          // can tell a secured result from a public one in the listing instead
+          // of only on the result page. `type` comes from the resolver, which
+          // fails closed, so a row whose type cannot be resolved is never
+          // listed as public.
+          const formattedResults = [];
+          for (const r of candidates) {
+            const visibility = await resolveResultVisibility({ result: r, adminToken, voterCookie });
+            if (!visibility.visible) continue;
+            formattedResults.push({
+              sessionId: r.sessionId,
+              title: r.title || '',
+              winner: r.winner,
+              entries: r.entries,
+              completedAt: r.completedAt,
+              type: visibility.type === 'secured' ? 'secured' : 'public',
+              publishResultsPublicly: r.publishResultsPublicly === true
+            });
+            if (formattedResults.length >= limit) break;
+          }
 
           sendJson(res, 200, {
             success: true,
@@ -2452,7 +2498,11 @@ export default function startServer(store, port = 8090) {
     socket.data = socket.data || {};
     socket.data.voterTokens = socket.data.voterTokens || {};
 
-    // AC-12: Parse vs_voter cookie from handshake headers
+    // AC-12: Parse vs_voter cookie from handshake headers so the socket carries a
+    // server-verified userId. The same cookie is re-checked once more at secured
+    // lifecycle borders (subscribe_session and join_session): a socket without a
+    // verified vs_voter cookie is anonymous and is refused any secured session
+    // handshake, not only dropped from the lobby filter.
     const handshakeCookies = parseCookies(socket.handshake?.headers?.cookie);
     if (handshakeCookies && handshakeCookies.vs_voter) {
       const auth = verifyVoterToken(handshakeCookies.vs_voter);
@@ -2514,8 +2564,10 @@ export default function startServer(store, port = 8090) {
         const sessionId = payload?.sessionId;
         let displayName = payload?.displayName;
         // User identity is server derived from verified handshake cookie only; never trust client payload
+        // (AC-12). A socket that connected without a verified vs_voter cookie is anonymous, and an
+        // anonymous socket is refused a secured session handshake outright: it cannot be a participant
+        // and it cannot be an admin, so it has nothing legitimate to join.
         const userId = socket.data?.userId || undefined;
-
         // Secured sessions run the same eligibility gate as the REST join
         // endpoint (AC-4, AC-5). Skipping it here registered any caller
         // straight past the allowlist and the approval queue.
@@ -2636,6 +2688,23 @@ export default function startServer(store, port = 8090) {
         // Resolve identity before touching the room. A secured session admits
         // only an admin socket or a voter the server issued a token for, so an
         // ineligible subscriber never joins the room or reads session_state.
+        //
+        // The server-side gate is the verified vs_voter cookie: a socket that
+        // connected without one is anonymous, and anonymous sockets are refused
+        // any secured session handshake outright rather than relying on a session
+        // token the anonymous caller cannot have. Allowlist and approval checks
+        // below run on top of that identity, never instead of it.
+        const storeSession = sessions.get(cleanSessionId);
+        const isSecuredSession = Boolean(storeSession && (storeSession.get('type') || storeSession.get('sessionType')) === 'secured');
+        if (isSecuredSession && !isSocketAdmin(socket) && !socket.data?.isRegisteredVoter) {
+          socket.emit('action_error', {
+            action: 'subscribe_session',
+            error: 'AUTHENTICATION_REQUIRED',
+            message: 'Sign in to subscribe to this secured session.'
+          });
+          return;
+        }
+
         let tokenToCheck = voterTokenCandidate || (socket.data?.voterTokens && socket.data.voterTokens[cleanSessionId]);
         if (tokenToCheck && typeof tokenToCheck === 'string' && tokenToCheck.startsWith('user:')) {
           if (!socket.data?.userId || tokenToCheck !== `user:${socket.data.userId}`) {
@@ -2653,8 +2722,6 @@ export default function startServer(store, port = 8090) {
         // The store is the authoritative live copy, so the secured check stays
         // synchronous here: an await would delay the room join past a broadcast
         // the client triggers straight after subscribing.
-        const storeSession = sessions.get(cleanSessionId);
-        const isSecuredSession = Boolean(storeSession && (storeSession.get('type') || storeSession.get('sessionType')) === 'secured');
         if (isSecuredSession && !isSocketAdmin(socket)) {
           const tokenValid = Boolean(tokenToCheck) && validateVoterToken(tokenToCheck, cleanSessionId).valid;
           if (!tokenValid) {

@@ -42,6 +42,23 @@ HTTP REST Interface (Port 8090)
 
 ---
 
+### Cookie-gated endpoint summary (generated)
+
+Every endpoint below requires the HttpOnly `vs_voter` cookie. The server refuses a
+request that omits it, and refuses a forged, tampered or empty cookie just as
+firmly; the client only ever reaches them through `services/api.js`, which
+always sends the cookie. The table is generated from
+[`contracts/cookie-gated-endpoints.json`](../contracts/cookie-gated-endpoints.json)
+and is covered by `voting-server/test/cookie_gated_endpoints_spec.js` and
+`voting-client/test/credentials_audit_spec.js`. Do not edit it by hand; run
+`node scripts/generate-api-contract-table.mjs` after changing the contract.
+
+<!-- BEGIN GENERATED: cookie-gated-endpoints -->
+| Method | Path | Client module | Rejection without the cookie |
+| --- | --- | --- | --- |
+| `POST` | `/api/sessions/:sessionId/join` | `services/auth.js` | 401 `AUTHENTICATION_REQUIRED` |
+<!-- END GENERATED: cookie-gated-endpoints -->
+
 ### Endpoint: `POST /api/admin/login`
 
 * **Purpose**: Authenticates the single global administrator using credentials and issues a signed JSON Web Token (JWT).
@@ -355,15 +372,17 @@ Set-Cookie: voter_token_sess_default=c4b3a1e2-9f8d-4e5a-8b1c-7d6e5f4a3b2c; Path=
 ### Endpoint: `GET /api/sessions/history`
 
 * **Purpose**: Retrieves a paginated list of concluded tournament results from MongoDB.
-* **Authentication Requirement**: None (Public read-only endpoint).
+* **Authentication Requirement**: None (public read). An optional `vs_voter` cookie or admin Bearer header widens the list for an approved participant or the admin; membership is the same `resolveResultVisibility` matrix the result and rounds reads use.
 * **Request Headers**:
   ```http
   Accept: application/json
+  Cookie: vs_voter=<token>            # optional, identifies an approved participant
+  Authorization: Bearer <admin-jwt>   # optional, identifies the admin
   ```
 * **Query Parameters**:
   * `limit` (*number*, optional, default: `50`, max: `100`): Maximum number of completed tournament records to return. Values greater than 100 are automatically clamped to 100; invalid or negative values fallback to 50.
 * **Ordering**: Deterministic descending order by completion timestamp (`completedAt` descending).
-* **Filter**: Strictly queries completed tournament outcomes from the `Result` collection.
+* **Filter**: Evaluates each completed tournament outcome from the `Result` collection through the shared visibility matrix. A public result and a published secured result are listed for every caller; an unpublished secured result is listed only for its approved participants and the admin, so a participant reads it from their own history without the admin publishing it. A caller who may not see a secured result simply receives a list without it, so the row's existence is not disclosed. Public publication of a secured result remains the separate admin action `SET_PUBLISH_RESULTS`.
 
 #### Successful Response: `200 OK`
 ```json

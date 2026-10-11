@@ -22,6 +22,23 @@
  *      anonymous callers, the same rule the socket registry already follows.
  *   8. Once START_SESSION has locked the roster, no new voter and no new join
  *      request gets in, while a voter who already joined may still rejoin.
+ *   9. Socket identity for a secured join is derived from the vs_voter handshake
+ *      cookie, never from a client sent userId or email. A payload that claims
+ *      somebody else is admitted as, gated on, and recorded under the cookie
+ *      holder.
+ *  10. That cookie derived identity is read on an HTTP polling handshake, not
+ *      only a WebSocket, and the cookie less polling control is still refused,
+ *      so the identity genuinely comes from the credential rather than an open
+ *      gate.
+ *  11. A re-handshake without the cookie drops the identity the server derived
+ *      on the first connection, so a logged out voter does not inherit it.
+ *  12. A secured vote writes its VoteParticipation record under the cookie
+ *      identity, not the one named in the vote payload, and records no choice.
+ *
+ * Guards 9 and 11 are pinned on the server side by hand rolled sockets here.
+ * Their client half, driven through the shipped helper against this same
+ * server, lives in voter_identity_rehandshake_integration_spec.js, so the two
+ * files together cover both ends of the re-handshake.
  */
 import { expect } from 'chai';
 import http from 'node:http';
@@ -685,7 +702,12 @@ describe('Secured sessions regression guards (Spec 0007)', function () {
       });
 
       expect(err.action).to.equal('subscribe_session');
-      expect(err.error).to.equal('NOT_ELIGIBLE');
+      // An anonymous socket is refused at subscribe time because it has no
+      // verified vs_voter cookie. The missing-credential name on the socket
+      // path is AUTHENTICATION_REQUIRED, matching the secured join endpoint:
+      // a probe cannot tell whether the refusal is because the session is
+      // secured or because the caller is not signed in.
+      expect(err.error).to.equal('AUTHENTICATION_REQUIRED');
 
       await new Promise((r) => setTimeout(r, 250));
       expect(stateReceived, 'an outsider must never receive the secured session state').to.be.null;
@@ -1113,6 +1135,117 @@ describe('Secured sessions regression guards (Spec 0007)', function () {
         .to.equal(String(voter._id));
       expect(doc).to.not.have.property('entry');
       expect(doc).to.not.have.property('vote');
+    });
+
+    it('derives identity from the vs_voter cookie on a polling transport handshake', async () => {
+      // covers: AC-15. The client asks the browser for credentials on the
+      // handshake so the cookie rides every transport, not only a WebSocket.
+      // This proves the server reads it from an HTTP long polling handshake,
+      // which is the half the client's `withCredentials` fix depends on. A
+      // transport that silently dropped the cookie would identify the voter as
+      // anonymous here.
+      const sessionId = 'sec_identity_polling';
+      const adminSocket = await createSecuredSession(sessionId, 'allowlist');
+      await emitWithAck(adminSocket, {
+        type: 'SET_ALLOWLIST',
+        sessionId,
+        emails: ['polling.voter@example.com'],
+        token: adminToken
+      });
+
+      const voter = await User.create({
+        email: 'polling.voter@example.com',
+        username: 'pollingvoter',
+        name: 'Polling Voter'
+      });
+
+      const socket = createSocketClient({
+        transports: ['polling'],
+        extraHeaders: { Cookie: buildVoterCookieHeader(generateVoterToken(voter)) }
+      });
+      await waitForEvent(socket, 'connect');
+
+      // Guard the test itself: if the transport ever upgraded to a WebSocket
+      // this would pass for the wrong reason.
+      expect(socket.io.engine.transport.name, 'the handshake must really be polling').to.equal('polling');
+
+      // The payload carries no identity at all, so only the handshake cookie
+      // can supply the userId the server derives.
+      const ack = await joinSession(socket, { sessionId });
+
+      expect(ack.success, 'an allowlisted voter must be admitted over polling').to.be.true;
+      expect(ack.voterToken).to.equal(`user:${voter._id}`);
+    });
+
+    it('refuses the same polling handshake with no vs_voter cookie', async () => {
+      // covers: AC-15. The control for the test above. Without the cookie the
+      // same polling join is anonymous and refused, so the admitted result is
+      // the cookie being read rather than the gate being open.
+      const sessionId = 'sec_identity_polling_anon';
+      const adminSocket = await createSecuredSession(sessionId, 'allowlist');
+      await emitWithAck(adminSocket, {
+        type: 'SET_ALLOWLIST',
+        sessionId,
+        emails: ['polling.voter@example.com'],
+        token: adminToken
+      });
+
+      const socket = createSocketClient({ transports: ['polling'] });
+      await waitForEvent(socket, 'connect');
+      expect(socket.io.engine.transport.name, 'the handshake must really be polling').to.equal('polling');
+
+      const ack = await joinSession(socket, { sessionId });
+
+      expect(ack.success).to.be.false;
+      expect(ack.error).to.equal('AUTHENTICATION_REQUIRED');
+    });
+
+    it('clears the socket identity when the client re-handshakes without the vs_voter cookie', async () => {
+      // covers: AC-15, and the client's voter logout path. Logout clears the
+      // cookie and forces a fresh handshake, the mirror of what
+      // applyAdminTokenToSocket does for the admin JWT. The server reads the
+      // cookie only at connection time, so the reconnect is what drops the
+      // identity it derived the first time.
+      const sessionId = 'sec_rehandshake_identity';
+      const adminSocket = await createSecuredSession(sessionId, 'allowlist');
+      await emitWithAck(adminSocket, {
+        type: 'SET_ALLOWLIST',
+        sessionId,
+        emails: ['rehandshake@example.com'],
+        token: adminToken
+      });
+
+      const voter = await User.create({
+        email: 'rehandshake@example.com',
+        username: 'rehandshake',
+        name: 'Rehandshake Voter'
+      });
+
+      const socket = createSocketClient({
+        transports: ['websocket'],
+        extraHeaders: { Cookie: buildVoterCookieHeader(generateVoterToken(voter)) }
+      });
+      await waitForEvent(socket, 'connect');
+
+      // With the cookie the server recognises this voter.
+      const before = await joinSession(socket, { sessionId });
+      expect(before.success, 'the cookie handshake must identify the voter first').to.be.true;
+      expect(before.voterToken).to.equal(`user:${voter._id}`);
+
+      // The voter logs out: the cookie is gone, so the client drops the old
+      // handshake and connects again with no Cookie header. The listener is
+      // attached before the reconnect so the event cannot be missed.
+      const reconnected = waitForEvent(socket, 'connect');
+      socket.io.opts.extraHeaders = {};
+      socket.disconnect();
+      socket.connect();
+      await reconnected;
+
+      // The identical secured join is now anonymous, which is only true if the
+      // server cleared socket.data.userId on the new connection.
+      const after = await joinSession(socket, { sessionId });
+      expect(after.success, 'a cookie less handshake must not inherit the old identity').to.be.false;
+      expect(after.error).to.equal('AUTHENTICATION_REQUIRED');
     });
   });
 });

@@ -26,16 +26,15 @@ import {
 import {
   subscribeSession,
   unsubscribeSession,
-  SERVER_URL,
   socket
 } from "../services/socket";
 import {
   hasJoinedSession,
   getVoterDisplayName,
   joinVoterSession,
-  clearVoterSession,
-  getAdminToken
+  clearVoterSession
 } from "../services/auth";
+import { apiRequest } from "../services/api";
 import { selectCurrentVoter, selectIsVoterLoggedIn } from "../redux/voterAuthSlice";
 import "./Lobby.css";
 
@@ -118,67 +117,50 @@ function Lobby() {
     let isMounted = true;
 
     // Spec 0008 AC-15: the lobby read is gated on the server, so it must carry
-    // the same credentials as the result and rounds reads. The `vs_voter`
-    // cookie rides along via `credentials: 'include'` and the admin Bearer
-    // header is attached when an admin token is in storage, otherwise an
-    // approved participant and the admin would meet the unknown session 404
+    // the same credentials as the result and rounds reads. apiRequest attaches
+    // the `vs_voter` cookie and the admin Bearer header centrally; without them
+    // an approved participant and the admin would meet the unknown session 404
     // for a session they are allowed to read.
-    const lobbyHeaders = { Accept: 'application/json' };
-    const adminToken = getAdminToken();
-    if (adminToken) {
-      lobbyHeaders.Authorization = `Bearer ${adminToken}`;
-    }
+    const loadLobby = async () => {
+      const res = await apiRequest(`/api/sessions/${encodeURIComponent(routeSessionId)}/lobby`);
+      if (!isMounted) return;
+      setIsLoading(false);
 
-    fetch(`${SERVER_URL}/api/sessions/${encodeURIComponent(routeSessionId)}/lobby`, {
-      headers: lobbyHeaders,
-      credentials: 'include'
-    })
-      .then((res) => {
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new Error("SESSION_NOT_FOUND");
-          }
-          throw new Error("LOBBY_FETCH_FAILED");
+      if (res.ok) {
+        const data = res.data;
+        if (data && data.success) {
+          // Dispatch lobbyUpdate to hydrate Redux store immediately
+          dispatch(lobbyUpdate({
+            sessionId: routeSessionId,
+            title: data.title,
+            status: data.status,
+            voterCount: data.voterCount,
+            entryCount: data.entryCount,
+            isArchived: data.isArchived,
+            votingStarted: data.votingStarted,
+            sessionType: data.sessionType || data.type,
+            type: data.sessionType || data.type,
+            whoCanJoin: data.whoCanJoin
+          }));
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (isMounted) {
-          setIsLoading(false);
-          if (data && data.success) {
-            // Dispatch lobbyUpdate to hydrate Redux store immediately
-            dispatch(lobbyUpdate({
-              sessionId: routeSessionId,
-              title: data.title,
-              status: data.status,
-              voterCount: data.voterCount,
-              entryCount: data.entryCount,
-              isArchived: data.isArchived,
-              votingStarted: data.votingStarted,
-              sessionType: data.sessionType || data.type,
-              type: data.sessionType || data.type,
-              whoCanJoin: data.whoCanJoin
-            }));
-          }
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setIsLoading(false);
-          if (err.message === "SESSION_NOT_FOUND") {
-            // A 404 now covers three cases: a missing session, a typo, and a
-            // secured session this caller may not read. They render one
-            // identical neutral state, because the client cannot tell them
-            // apart and must not claim the session does not exist
-            // (spec 0008 AC-15).
-            setFetchError("SESSION_NOT_AVAILABLE");
-          } else {
-            // A transport failure is not an existence signal, so it keeps its
-            // own honest message rather than borrowing the neutral copy.
-            setFetchError("Unable to load session lobby.");
-          }
-        }
-      });
+        return;
+      }
+
+      if (res.status === 404) {
+        // A 404 now covers three cases: a missing session, a typo, and a
+        // secured session this caller may not read. They render one
+        // identical neutral state, because the client cannot tell them
+        // apart and must not claim the session does not exist
+        // (spec 0008 AC-15).
+        setFetchError("SESSION_NOT_AVAILABLE");
+      } else {
+        // A transport failure is not an existence signal, so it keeps its
+        // own honest message rather than borrowing the neutral copy.
+        setFetchError("Unable to load session lobby.");
+      }
+    };
+
+    loadLobby();
 
     return () => {
       isMounted = false;

@@ -1,9 +1,9 @@
 # VoteSphere — Full-Stack Real-Time Pairwise Voting Application
 
-[![CI Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-799%2F799%20passing-brightgreen.svg)](#testing--verification)
-[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-595%2F595%20passing-brightgreen.svg)](#testing--verification)
-[![Total Tests](https://img.shields.io/badge/total%20tests-1394%20passing-brightgreen.svg)](#testing--verification)
+[![CI Status](https://github.com/Nisam97/fullstack-redux-voting-app/actions/workflows/ci.yml/badge.svg)](https://github.com/Nisam97/fullstack-redux-voting-app/actions/workflows/ci.yml)
+[![Backend Tests](https://img.shields.io/badge/backend%20tests-816%20passing-brightgreen.svg)](#testing--verification)
+[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-668%20passing-brightgreen.svg)](#testing--verification)
+[![Total Tests](https://img.shields.io/badge/total%20tests-1484%20passing-brightgreen.svg)](#testing--verification)
 [![ESLint](https://img.shields.io/badge/eslint-0%20errors-brightgreen.svg)](#testing--verification)
 [![Vite Build](https://img.shields.io/badge/vite%20build-passing-brightgreen.svg)](#testing--verification)
 [![Core Engine](https://img.shields.io/badge/core.js-protected%20pure-blue.svg)](#architecture)
@@ -183,7 +183,7 @@ fullstack-redux-voting-app/
 │   │   ├── redux/                   # Redux Toolkit store, voteSlice, voterAuthSlice
 │   │   ├── routes/                  # App routing hierarchy
 │   │   └── services/                # Socket.io connection and REST API clients
-│   └── test/                        # 32 node:test spec files (139 suites, 468 tests)
+│   └── test/                        # Node test specs (149 suites) + Vitest JSX component specs
 └── voting-server/                   # Authoritative Backend Engine
     ├── package.json                 # Server dependencies and npm scripts
     ├── index.js                     # Server entrypoint and MongoDB connection
@@ -197,7 +197,7 @@ fullstack-redux-voting-app/
     │   ├── auth/                    # Admin JWT, voter tokens, OTP, voter cookies
     │   ├── db/                      # Mongoose connection, models, repository, persistence
     │   └── email/                   # Nodemailer OTP email transporter
-    └── test/                        # 47 Mocha spec files (799 tests)
+    └── test/                        # 49 Mocha spec files (816 tests)
 ```
 
 ---
@@ -382,7 +382,7 @@ VoteSphere maintains comprehensive test coverage across both frontend and backen
 cd voting-server
 npm test
 ```
-**Results:** **799 passing** (0 failing across 47 spec files in Mocha).
+**Results:** **816 passing** (0 failing across 49 spec files in Mocha).
 
 ### Execute Frontend Test Suite
 ```bash
@@ -391,7 +391,7 @@ npm test          # runs test:unit then test:component
 npm run test:unit      # node --test logic and reducer specs
 npm run test:component # Vitest + jsdom component, and axe accessibility, specs
 ```
-**Results:** **468 passing** (0 failing across 139 logic suites in the Node test runner) plus **127 passing** (0 failing across 6 component files under Vitest).
+**Results:** **501 passing** (0 failing across 149 logic suites in the Node test runner) plus **167 passing** (0 failing across 10 component files under Vitest).
 
 ### Code Quality & Production Build
 ```bash
@@ -400,7 +400,7 @@ npm run lint    # ESLint verification: 0 errors, 0 warnings
 npm run build   # Production Vite bundle: builds successfully (a >500 kB chunk-size warning may appear; exit code 0)
 ```
 
-**Overall Verified Status:** **1394 automated tests passing** (799 backend + 468 unit + 127 component), 0 failing, 0 lint warnings. Accessibility on the voting and lobby screens is asserted with `axe-core` at the critical and serious level, and that scan carries a self check so an empty result cannot pass as clean.
+**Overall Verified Status:** **1484 automated tests passing** (816 backend + 501 unit + 167 component), 0 failing, 0 lint warnings. Accessibility on the voting and lobby screens is asserted with `axe-core` at the critical and serious level, and that scan carries a self check so an empty result cannot pass as clean.
 
 ---
 

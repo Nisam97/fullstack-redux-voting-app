@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setVoterAuth } from "../redux/voterAuthSlice";
 import { requestOtp, verifyOtp } from "../services/auth";
+import { reattachVoterIdentityToSocket } from "../services/socket";
 import { Mail, User, AtSign, KeyRound, ArrowRight, RotateCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import Footer from "../components/layout/Footer";
@@ -105,6 +106,10 @@ function Register() {
 
     // Success! Update Redux voter auth state
     dispatch(setVoterAuth({ user: res.user }));
+    // The socket handshook at app load, before the server set the vs_voter
+    // cookie, so re-handshake now that it exists. Without this the server keeps
+    // treating this freshly signed in voter as anonymous until a page reload.
+    reattachVoterIdentityToSocket();
     navigate("/");
   };
 

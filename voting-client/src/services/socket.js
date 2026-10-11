@@ -55,6 +55,16 @@ const initialAdminToken = readStoredAdminToken();
  */
 export const socket = io(SERVER_URL, {
   autoConnect: true,
+  // `withCredentials` is what makes the browser attach the `vs_voter` cookie to
+  // the handshake. The server derives voter identity for secured sessions only
+  // from that cookie (spec 0007 AC-15), so without this the voter looks
+  // anonymous on the socket. A WebSocket handshake tends to carry cookies on its
+  // own, but the polling transport sends cross origin cookies only when
+  // credentials are requested, so a fallback to polling would silently drop
+  // them. The server already reflects the exact allowed origin with
+  // `Access-Control-Allow-Credentials: true`, so asking for credentials is
+  // enough; `*` origins are never used.
+  withCredentials: true,
   transports: ['websocket', 'polling'],
   ...(initialAdminToken ? { auth: { token: initialAdminToken } } : {})
 });
@@ -99,6 +109,31 @@ export function applyAdminTokenToSocket(token) {
     delete socket.auth.token;
   }
 
+  try {
+    socket.disconnect();
+    socket.connect();
+  } catch {
+    // A transport failure here surfaces through the normal reconnect path.
+  }
+  return true;
+}
+
+/**
+ * Forces a fresh Socket.io handshake so the browser re-sends the `vs_voter`
+ * cookie. The server derives voter identity for secured sessions only from that
+ * cookie, and Socket.io sends cookies during the handshake, so a socket that
+ * connected before the voter signed in keeps the old anonymous identity until
+ * it reconnects. This is the voter counterpart of `applyAdminTokenToSocket`,
+ * which reconnects for the admin JWT that rides the handshake `auth`.
+ *
+ * The cookie is HttpOnly, so the client cannot read or set it; all this can do
+ * is ask for a new handshake and let the browser attach it. Room subscriptions
+ * survive because `connectSocketToStore` restores them on every 'connect'.
+ *
+ * @returns {boolean} true when a reconnect was triggered.
+ */
+export function reattachVoterIdentityToSocket() {
+  if (!socket) return false;
   try {
     socket.disconnect();
     socket.connect();

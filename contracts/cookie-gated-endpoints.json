@@ -1,0 +1,12 @@
+{
+  "endpoints": [
+    {
+      "id": "secured-join",
+      "fixture": "secured-join",
+      "method": "POST",
+      "path": "/api/sessions/:sessionId/join",
+      "clientModule": "services/auth.js",
+      "rejection": { "status": 401, "error": "AUTHENTICATION_REQUIRED" }
+    }
+  ]
+}

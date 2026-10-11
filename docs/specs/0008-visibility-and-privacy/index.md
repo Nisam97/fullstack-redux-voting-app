@@ -3,6 +3,7 @@
 **Date**: 2026-10-04
 **Status**: Accepted
 **Amended**: 2026-10-04, AC-14 and AC-15 added after acceptance. Build plan step 7 landed with them on 2026-10-05.
+**Amended**: 2026-10-10, AC-5 made caller aware. The history listing now resolves each completed row through the shared matrix, so an approved participant reads a concluded secured result from their own history without the admin publishing it. Public publication stays the separate `SET_PUBLISH_RESULTS` action.
 
 ## Summary
 
@@ -22,7 +23,7 @@ Secured sessions already hide their roster, but their results are not hidden. On
 - **AC-2**: An unpublished secured session's result and round tallies are visible only to its approved participants (an allowlist email match, or a `SessionJoinRequest` with status `approved`, both resolved from the verified `vs_voter` cookie) and to the admin. Every other caller receives the same `404` a missing result returns from the history, result, and rounds reads, and the lobby metadata omits the `winner` field instead. The existence of the session is not revealed.
 - **AC-3**: The admin publishes or unpublishes with the admin socket action `SET_PUBLISH_RESULTS ({ sessionId, publishResultsPublicly: boolean })`. It is admin only (registered in `ADMIN_ACTION_TYPES`), rejects a session whose status is neither `completed` nor `archived` with `SESSION_NOT_COMPLETED`, and writes `publishResultsPublicly` to both the `Session` and its `Result` row in one step so they never drift. An archived session is publishable, since archiving is a post completion action and must not strand a result.
 - **AC-4**: While a secured result is published, anyone (anonymous included) can view it by session id on the result and rounds endpoints, and it appears in `GET /api/sessions/history`, but only after the session has completed. Once it is unpublished, it disappears from history and non participants receive `404` again.
-- **AC-5**: `GET /api/sessions/history` returns every completed public result plus every completed secured result whose `publishResultsPublicly` is true. An unpublished secured result is absent, and a result whose session has not completed is absent.
+- **AC-5**: `GET /api/sessions/history` returns every completed result the caller may see under the shared visibility matrix (`resolveResultVisibility`). A public result and a published secured result are listed for every caller; an unpublished secured result is listed only for its approved participants and the admin, so a participant reads it from their own history without the admin publishing it, and publishing stays the separate admin action that makes it visible to everyone. A caller who may not see a secured result receives a list without it, and a result whose session has not completed is absent.
 - **AC-6**: A secured session still in progress is readable (rounds and live result state) only by its approved participants and the admin, before any publish. Outsiders receive `404`. This aligns the REST reads with the already gated socket room; the socket gate itself is unchanged.
 - **AC-7**: The admin views per round turnout for any session, at any time, through `GET /api/sessions/:id/turnout` (admin Bearer token) and the admin only `session_turnout` socket event. Turnout lists every round of the session in ascending `roundIndex` order (taken from the persisted round snapshots when the session is completed, and from the live round manager otherwise), showing the signed in voters who voted in that round (display name and email), with an empty `voters` list when nobody voted. It never shows the vote choice. Anonymous voters are absent by design.
 - **AC-8**: Turnout is visible only to the admin. A non admin caller to the turnout endpoint receives `404`, and a non admin socket subscribing to `session_turnout` receives `UNAUTHORIZED`. No voter facing payload ever contains turnout data.
@@ -79,7 +80,7 @@ publishResultsPublicly (Session and Result, held in step):
 
 | Endpoint / Action | Method | Key inputs | Key outputs | Auth | Key errors |
 |---|---|---|---|---|---|
-| `GET /api/sessions/history` | REST (modified) | none | `{ results: [...] }` filtered to public plus published secured | public | none |
+| `GET /api/sessions/history` | REST (modified) | none (optional `vs_voter` cookie or admin Bearer widen the list) | `{ results: [...] }` filtered through the shared visibility matrix: public plus published secured for everyone, plus the caller's own unpublished secured results | public | none |
 | `GET /api/sessions/:id/result` | REST (modified) | session id | `{ result }` including `type` and `publishResultsPublicly` when visible | public, `vs_voter` cookie or admin Bearer for gated secured reads | `404` when gated or missing |
 | `GET /api/sessions/:id/rounds` | REST (modified) | session id | `{ rounds }` when visible | as above | `404` when gated or missing |
 | `GET /api/sessions/:id/lobby` | REST (modified) | session id | lobby metadata for a public session, for a published secured session, and for a secured session read by an approved participant or the admin; `winner` omitted when the result itself is gated | public, `vs_voter` cookie or admin Bearer on a secured session | `404 SESSION_NOT_FOUND` when the session is unknown **or** secured and gated for this caller |
@@ -93,7 +94,7 @@ publishResultsPublicly (Session and Result, held in step):
 |---|---|---|
 | Result creation at completion | `type` | `Session.type` read at completion (default `'public'`) |
 | Result creation at completion | `publishResultsPublicly` | `Session.publishResultsPublicly` read at completion (default false) |
-| History filter | which results are listed | derived: `type === 'public' OR publishResultsPublicly === true` |
+| History filter | which results are listed | derived: `resolveResultVisibility` per completed row, fed by the admin Bearer and the `vs_voter` cookie |
 | Result / rounds gate | caller is admin | derived: `verifyAdminToken` on the `Authorization: Bearer` header |
 | Result / rounds gate | caller is a participant | derived: `vs_voter` cookie `userId` and `email`, then `SessionJoinRequest.findOne({ sessionId, userId, status: 'approved' })` or `SessionAllowlistEntry.findOne({ sessionId, email })` |
 | `SET_PUBLISH_RESULTS` | new flag value | input `publishResultsPublicly` (validated boolean) |
@@ -134,6 +135,7 @@ publishResultsPublicly (Session and Result, held in step):
 | Approved participant | visible | visible | visible |
 | Admin (Bearer) | visible | visible | visible |
 
+- The same table governs `GET /api/sessions/history`. An unpublished secured result is listed only for its approved participants and the admin, and is simply absent from the list a denied caller receives (the listing is a `200` list, so absence, not `404`, is how it withholds the row there).
 - Admin REST reads authenticate with a Bearer admin JWT (the pattern `GET /api/sessions` and `GET /api/auth/me` already use). Voter REST reads authenticate with the `vs_voter` cookie. Both are resolved before the eligibility lookup, and eligibility is read from the same allowlist and request tables the join gate uses.
 - A denied caller receives `404`, never `403`, so the existence of an unpublished secured session is not disclosed. The lobby follows the same rule, and the two `404` bodies are byte identical, so a `200` on the lobby is itself the signal that the session is readable by this caller.
 - The lobby gate uses the shared resolver rather than a second rule, so a door cannot be added that forgets it.
