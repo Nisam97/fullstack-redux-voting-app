@@ -5,7 +5,7 @@
 - **Language / Runtime**: JavaScript (ES modules), Node.js 18+
 - **Frontend**: React 19, Vite 8, Redux Toolkit 2, React Router 7, Recharts, Socket.io client
 - **Backend**: Node `http`, Socket.io 4, Redux 5 over Immutable.js 3, Mongoose 9 on MongoDB
-- **Key dependencies**: @reduxjs/toolkit, immutable, mongoose, socket.io, jsonwebtoken, bcrypt, nodemailer (OTP email), csv-parse (allowlist upload); client extras: qrcode (lobby QR codes), lucide-react, react-icons
+- **Key dependencies**: @reduxjs/toolkit, immutable, mongoose, socket.io, jsonwebtoken, bcrypt, nodemailer (OTP email), csv-parse (allowlist upload); client extras: qrcode (lobby QR codes), lucide-react
 - **Package manager**: npm, two separate packages (`voting-client`, `voting-server`), no workspace tooling
 
 ## Build approach
@@ -29,6 +29,8 @@ cd voting-client && npm run build
 cd voting-client && npm run lint
 cd voting-client && npm test   # node --test unit specs, then Vitest component tests
 cd voting-server && npm test   # Mocha via test/runner.cjs
+# Context file pointers (the same check CI runs; it fails when an AGENTS.md or CLAUDE.md cites a path that does not exist)
+node scripts/check-context-pointers.mjs
 ```
 
 ## Specs
@@ -37,7 +39,14 @@ Stored in `docs/specs/`. Older specs are a single file, `docs/specs/NNNN-title.m
 
 ## Reviews
 
-- [REVIEW_STATE.md](docs/reviews/REVIEW_STATE.md): review verdicts for this branch's hardening and contract-table rollout.
+- [docs/reviews/](docs/reviews/): review verdicts, one file per dated pass. This line pointed at a REVIEW_STATE.md that was never written, which is what the context pointer check now catches.
+
+## Reports
+
+- Every skill that reports on work delivers two parts, in this order: the human summary it already leads with, then a machine readable receipt in one fenced code block, on every run, including a run with nothing to report. This covers `/audit`, `/scope`, `/architect`, `/develop`, `/check` in both its verify and review modes, `/test`, `/debug`, `/document` and `/sync`.
+- The receipt is the last thing in the message, inside one fence, with nothing after it. One `UPPER_SNAKE` key per line as `KEY: value`, and any list under a key is a `- ` line. A section with nothing in it is omitted, never emitted empty. Once a key is published its spelling is frozen, because a reader keys on it.
+- Each skill's own report step names the keys it uses and holds the full list, so a receipt always carries at least the subject, the result, and the suggested next step. For `/sync` the keys are written out in `.agents/skills/sync/agent-prompt.md` step 7.
+- This contract is written here as well as in the skills, on purpose. `.agents/` and `.claude/` are gitignored, so `npx skills add` overwrites a skill's own copy of the rule, while this file is tracked and is what the next run still reads.
 
 ## Rules
 
@@ -73,7 +82,7 @@ Stored in `docs/specs/`. Older specs are a single file, `docs/specs/NNNN-title.m
 
 All Agent Skills install to the repo root `.agents/skills/`, whatever package they serve, so a nested `AGENTS.md` links one with `../.agents/skills/<skill>/`. `skills-lock.json` records the registry source and install scope for each one.
 
-- Declined: Socket.io, Mongoose, Nodemailer, React Router, Recharts (tool discovery skipped by the engineer, nothing was searched or installed)
+- Declined: Socket.io, Mongoose, Nodemailer, React Router, Recharts (tool discovery skipped by the engineer, nothing was searched or installed); React 19, Vite 8, Redux Toolkit, Playwright, Mocha, chai, mongodb-memory-server, axe-core, csv-parse, bcrypt, jsonwebtoken, qrcode, lucide-react (offered again 2026-10-15 and declined, nothing searched or installed)
 
 ## Context files
 
@@ -81,3 +90,18 @@ All Agent Skills install to the repo root `.agents/skills/`, whatever package th
 - [voting-server/AGENTS.md](voting-server/AGENTS.md): authoritative engine, auth, timers, persistence.
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
+
+<!-- antislop:start -->
+## antislop
+For UI, copy, people, mobile layout, or code comments work, read these installed skill files directly (use these paths even if a same-named global skill exists):
+- Core filter, always on: `antislop`: `.agents/skills/antislop/SKILL.md`
+- UI / visual: `antislop-ui`: `.agents/skills/antislop-ui/SKILL.md`
+- Code comments: `antislop-code`: `.agents/skills/antislop-code/SKILL.md`
+- Mobile / responsive: `antislop-layoutmobile`: `.agents/skills/antislop-layoutmobile/SKILL.md`
+- Copy & text: `antislop-copywriting`: `.agents/skills/antislop-copywriting/SKILL.md`
+- People: `antislop-human`: `.agents/skills/antislop-human/SKILL.md`
+Before starting, follow the core's "Two Usage Modes" section in strict order: explicit session instruction first, then global preference, then ask. A session instruction always wins. For a resolved mode, say `antislop active: <mode> (session override).` or `antislop active: <mode> (global preference).` once before presenting findings or making edits, using the actual mode and source. Acknowledging the user's request without naming the source does not replace this notice.
+Only an explicit choice of antislop during or after selects a session mode. A request to review, audit, or avoid file edits does not select a mode; read the global preference in that case. Another skill's mode does not select antislop's mode.
+If the mode is unresolved, ask during/after and end the response; wait for the answer before any UI review, planning, or concept. For read-only tasks, put the active-mode notice only at the start of the final answer, never in progress messages. For editing tasks, announce before the first edit and omit it from the final answer.
+To update antislop later: `npx antislop-ai --update`, or run `npx antislop-ai` and pick Overwrite them.
+<!-- antislop:end -->

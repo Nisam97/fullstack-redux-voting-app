@@ -303,19 +303,19 @@ function Lobby() {
       <main className="lobby-main">
         {fetchError === "SESSION_NOT_AVAILABLE" && !session ? (
           <div className="lobby-card" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
-            <AlertCircle size={48} style={{ color: "#ef4444", margin: "0 auto 1rem auto" }} />
+            <AlertCircle size={48} style={{ color: "var(--status-danger)", margin: "0 auto 1rem auto" }} />
             <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.5rem 0" }}>
               This session is not available.
             </h1>
             {isVoterLoggedIn ? (
-              <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.95rem" }}>
                 Check the link you were given, or ask the organizer for an invitation.
               </p>
             ) : (
-              <p style={{ color: "#94a3b8", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", marginBottom: "1.5rem" }}>
                 <Link
                   to={`/login?redirect=${encodeURIComponent(`/sessions/${routeSessionId}/lobby`)}`}
-                  style={{ color: "#38bdf8", fontWeight: 600 }}
+                  style={{ color: "var(--accent-primary)", fontWeight: 600 }}
                 >
                   Sign in if you were invited.
                 </Link>
@@ -324,11 +324,11 @@ function Lobby() {
           </div>
         ) : fetchError && !session ? (
           <div className="lobby-card" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
-            <AlertCircle size={48} style={{ color: "#ef4444", margin: "0 auto 1rem auto" }} />
+            <AlertCircle size={48} style={{ color: "var(--status-danger)", margin: "0 auto 1rem auto" }} />
             <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 0.5rem 0" }}>
               Unable to load session lobby.
             </h1>
-            <p style={{ color: "#94a3b8", fontSize: "0.95rem" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.95rem" }}>
               Check your connection and try again.
             </p>
           </div>
@@ -337,12 +337,12 @@ function Lobby() {
             <RefreshCw
               size={36}
               className="voting-spinner"
-              style={{ color: "#38bdf8", margin: "0 auto 1.25rem auto" }}
+              style={{ color: "var(--accent-primary)", margin: "0 auto 1.25rem auto" }}
             />
             <h2 style={{ fontSize: "1.3rem", fontWeight: 600, margin: "0 0 0.5rem 0" }}>
               Connecting to Waiting Room...
             </h2>
-            <p style={{ color: "#94a3b8", fontSize: "0.9rem" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
               Subscribing to session <code>{routeSessionId}</code>
             </p>
           </div>
@@ -395,7 +395,7 @@ function Lobby() {
                 </span>
               )}
               {winner && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", color: "#fbbf24" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", color: "var(--status-warning)" }}>
                   <Trophy size={15} /> Winner: <strong>{winner}</strong>
                 </span>
               )}
@@ -415,7 +415,7 @@ function Lobby() {
                   <h2>
                     {voterCount} {voterCount === 1 ? "Participant" : "Participants"} Registered
                     {typeof session?.connectedCount === "number" && (
-                      <span style={{ fontSize: "0.85rem", fontWeight: 500, marginLeft: "0.5rem", color: "#38bdf8" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 500, marginLeft: "0.5rem", color: "var(--accent-primary)" }}>
                         ({session.connectedCount} online)
                       </span>
                     )}
@@ -423,7 +423,7 @@ function Lobby() {
                   <p>Authoritative live headcount updated in real time</p>
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#38bdf8", fontSize: "0.85rem", fontWeight: 500 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--accent-primary)", fontSize: "0.85rem", fontWeight: 500 }}>
                 <Radio size={16} /> Room Connected
               </div>
             </div>
@@ -431,7 +431,7 @@ function Lobby() {
             {/* Voter Status / Join Form Section */}
             {isArchived ? (
               <div className="lobby-status-banner lobby-status-archived">
-                <AlertCircle size={20} style={{ color: "#94a3b8", flexShrink: 0, marginTop: 2 }} />
+                <AlertCircle size={20} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }} />
                 <div>
                   <strong>Session Archived</strong>
                   <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.9rem" }}>
@@ -453,16 +453,16 @@ function Lobby() {
                     </p>
                   </div>
                 </div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", color: "#4ade80", fontSize: "0.85rem", fontWeight: 600 }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", color: "var(--status-success)", fontSize: "0.85rem", fontWeight: 600 }}>
                   <ShieldCheck size={16} /> Session-Scoped Pass Active
                 </div>
               </div>
             ) : isPendingApproval ? (
-              <div className="lobby-status-banner lobby-status-pending" style={{ borderColor: "#38bdf8", background: "rgba(56, 189, 248, 0.08)", marginBottom: "1.5rem" }}>
-                <RefreshCw size={24} className="voting-spinner" style={{ color: "#38bdf8", flexShrink: 0, marginTop: 2 }} />
+              <div className="lobby-status-banner lobby-status-pending" style={{ borderColor: "var(--accent-primary)", background: "var(--accent-surface)", marginBottom: "1.5rem" }}>
+                <RefreshCw size={24} className="voting-spinner" style={{ color: "var(--accent-primary)", flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <strong style={{ fontSize: "1rem", color: "#38bdf8" }}>Request Pending Approval</strong>
-                  <p style={{ margin: "0.3rem 0 0 0", fontSize: "0.9rem", color: "#cbd5e1" }}>
+                  <strong style={{ fontSize: "1rem", color: "var(--accent-primary)" }}>Request Pending Approval</strong>
+                  <p style={{ margin: "0.3rem 0 0 0", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
                     Your request to join this secured session has been submitted. Please wait while the organizer reviews and approves your request.
                   </p>
                 </div>
@@ -470,15 +470,15 @@ function Lobby() {
             ) : isSecured && !isVoterLoggedIn ? (
               <section className="lobby-join-section">
                 <h2 className="lobby-join-title">
-                  <LogIn size={20} style={{ color: "#38bdf8" }} />
+                  <LogIn size={20} style={{ color: "var(--accent-primary)" }} />
                   Secured Voting Session
                 </h2>
-                <div style={{ marginBottom: "1.25rem", padding: "1.25rem", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.25)", borderRadius: "10px" }}>
+                <div style={{ marginBottom: "1.25rem", padding: "1.25rem", background: "var(--status-danger-bg)", border: "1px solid var(--status-danger-bg)", borderRadius: "10px" }}>
                   <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                    <AlertCircle size={22} style={{ color: "#f87171", flexShrink: 0, marginTop: 2 }} />
+                    <AlertCircle size={22} style={{ color: "var(--status-danger)", flexShrink: 0, marginTop: 2 }} />
                     <div>
-                      <strong style={{ color: "#f87171", fontSize: "0.95rem" }}>Authentication Required</strong>
-                      <p style={{ margin: "0.3rem 0 0.85rem 0", fontSize: "0.88rem", color: "#cbd5e1" }}>
+                      <strong style={{ color: "var(--status-danger)", fontSize: "0.95rem" }}>Authentication Required</strong>
+                      <p style={{ margin: "0.3rem 0 0.85rem 0", fontSize: "0.88rem", color: "var(--text-secondary)" }}>
                         This session is secured with {whoCanJoin === "approval" ? "organizer approval" : "an approved participant allowlist"}. You must sign in with your email account to join.
                       </p>
                       <Link
@@ -495,11 +495,11 @@ function Lobby() {
             ) : (
               <section className="lobby-join-section">
                 <h2 className="lobby-join-title">
-                  <LogIn size={20} style={{ color: "#38bdf8" }} />
+                  <LogIn size={20} style={{ color: "var(--accent-primary)" }} />
                   Join this Voting Session
                 </h2>
                 {isVoterLoggedIn ? (
-                  <p className="lobby-join-desc" style={{ color: "#38bdf8" }}>
+                  <p className="lobby-join-desc" style={{ color: "var(--accent-primary)" }}>
                     Signed in as <strong>{currentVoter?.name}</strong> (@{currentVoter?.username}). Your display name is pre filled.
                   </p>
                 ) : (
@@ -507,8 +507,8 @@ function Lobby() {
                     <p className="lobby-join-desc">
                       Enter a display name to participate. No email or password required. You will be automatically admitted to voting once the host starts the tournament.
                     </p>
-                    <div style={{ marginBottom: "1rem", padding: "0.6rem 0.9rem", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.2)", borderRadius: "8px", fontSize: "0.85rem", color: "#94a3b8" }}>
-                      💡 <strong style={{ color: "#e2e8f0" }}>Sign in for a better experience</strong> — keep your voter identity across sessions and pre fill your display name. <Link to="/login" style={{ color: "#38bdf8", fontWeight: 600 }}>Sign in here</Link>
+                    <div style={{ marginBottom: "1rem", padding: "0.6rem 0.9rem", background: "var(--accent-surface)", border: "1px solid var(--border-accent)", borderRadius: "8px", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                      <strong style={{ color: "var(--text-secondary)" }}>Tip: sign in before you join.</strong> Sign in to keep your voter identity across sessions and pre fill your display name. <Link to="/login" style={{ color: "var(--accent-primary)", fontWeight: 600 }}>Sign in here</Link>
                     </div>
                   </>
                 )}

@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { Vote } from "lucide-react";
 import "./Footer.css";
 
 function Footer() {
@@ -6,12 +8,15 @@ function Footer() {
 
       <div className="container footer-grid">
 
-        <div>
+        <div className="footer-brand">
 
-          <h2>🗳 VoteSphere</h2>
+          <h2>
+            <Vote size={20} aria-hidden="true" /> VoteSphere
+          </h2>
 
           <p>
-            Secure • Transparent • Real-Time Voting Platform
+            Passwordless, server-authoritative voting for colleges,
+            organizations and events.
           </p>
 
         </div>
@@ -21,21 +26,11 @@ function Footer() {
           <h3>Quick Links</h3>
 
           <ul>
-            <li>Home</li>
-            <li>Vote</li>
-            <li>Results</li>
-            <li>About</li>
+            <li><Link to="/">Home</Link></li>
+            <li><Link to="/join">Join a Session</Link></li>
+            <li><Link to="/history">Results History</Link></li>
+            <li><Link to="/login">Sign In</Link></li>
           </ul>
-
-        </div>
-
-        <div>
-
-          <h3>Contact</h3>
-
-          <p>support@votesphere.com</p>
-
-          <p>+91 98765 43210</p>
 
         </div>
 

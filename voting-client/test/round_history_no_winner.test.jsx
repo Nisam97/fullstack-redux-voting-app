@@ -187,7 +187,7 @@ describe('Results page round history for a completion with no winner', () => {
     // covers: AC-4
     renderResults(makeStore(completedNoWinnerSession()))
 
-    expect(await screen.findByText('Final Round — No winner declared')).toBeInTheDocument()
+    expect(await screen.findByText('Final Round: No winner declared')).toBeInTheDocument()
     expect(screen.queryByText(/Winner crowned tournament champion/i)).not.toBeInTheDocument()
   })
 
@@ -227,7 +227,7 @@ describe('Results page round history for a completion with no winner', () => {
     renderResults(makeStore(completedNoWinnerSession({ winner: 'Ash' })))
 
     expect(await screen.findByText('We Have a Winner!')).toBeInTheDocument()
-    expect(await screen.findByText('Championship Round — Winner crowned tournament champion')).toBeInTheDocument()
+    expect(await screen.findByText('Championship Round: Winner crowned tournament champion')).toBeInTheDocument()
   })
 
   it('shows the history again once the round closes and the reveal starts (AC-5)', async () => {

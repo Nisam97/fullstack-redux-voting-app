@@ -245,7 +245,9 @@ export function applyTallyVisibilityGuard(sessionObj, roundContext = {}) {
   const status = sessionObj.status;
   const roundLifecycle = roundContext.roundLifecycle || sessionObj.roundLifecycle;
 
-  const sessionConcluded = status === 'completed';
+  // Archiving happens after completion, so both statuses are conclusions:
+  // treating only 'completed' as one stripped `rounds` from the archive broadcast.
+  const sessionConcluded = status === 'completed' || status === 'archived';
   const revealActive = roundLifecycle === 'RESULTS_REVEALED';
   const roundClosed = roundLifecycle === 'ROUND_CLOSED';
   const roundLive = roundLifecycle === 'VOTING';
@@ -1219,8 +1221,15 @@ export default function startServer(store, port = 8090) {
       }
     }
 
-    const active = roundManager.getCurrentRound(cleanSessionId, actualStore);
-    if (active && typeof active.roundIndex === 'number') roundIndexes.add(active.roundIndex);
+    // Spec 0008 AC-7: a concluded session takes round identity from persisted snapshots only.
+    // The round manager still holds the re-armed, never executed round a single ballot finish creates.
+    const storeStatus = session ? session.get('status') : null;
+    const concluded = Boolean(session)
+      && (storeStatus === 'completed' || storeStatus === 'archived' || Boolean(session.get('winner')));
+    if (!concluded) {
+      const active = roundManager.getCurrentRound(cleanSessionId, actualStore);
+      if (active && typeof active.roundIndex === 'number') roundIndexes.add(active.roundIndex);
+    }
 
     if (isConnected()) {
       try {

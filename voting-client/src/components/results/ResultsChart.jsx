@@ -81,23 +81,25 @@ function ResultsChart({
             data={data}
             margin={{ top: 20, right: 30, left: 10, bottom: 25 }}
           >
+            {/*
+              Axis colours come from CSS (ResultsChart.css) rather than
+              presentation attributes, because `var()` does not resolve inside
+              an SVG attribute. The `.results-chart-axis` class carries the
+              token-driven text, tick and line styling for both themes.
+            */}
             <XAxis
               dataKey="name"
-              stroke="#64748b"
-              tick={{ fill: '#cbd5e1', fontSize: 13, fontWeight: 500 }}
-              tickLine={{ stroke: '#475569' }}
-              axisLine={{ stroke: '#475569' }}
+              className="results-chart-axis"
+              tick={{ fontSize: 13, fontWeight: 500 }}
             />
             <YAxis
-              stroke="#64748b"
-              tick={{ fill: '#94a3b8', fontSize: 12 }}
-              tickLine={{ stroke: '#475569' }}
-              axisLine={{ stroke: '#475569' }}
+              className="results-chart-axis"
+              tick={{ fontSize: 12 }}
               allowDecimals={false}
             />
             <Tooltip
               content={<ChartTooltip />}
-              cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+              cursor={{ fill: 'rgba(224, 147, 110, 0.07)' }}
             />
             <Bar
               dataKey="votes"

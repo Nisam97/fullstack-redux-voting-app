@@ -1,14 +1,15 @@
-/* TotalsPanel Component Styles */
+/* =========================================================
+   TotalsPanel — Aura Design System
+   ========================================================= */
 
 .totals-panel {
   width: 100%;
   margin: 2rem 0;
   border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   padding: 1.5rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-soft);
 }
 
 .totals-panel-header {
@@ -18,7 +19,7 @@
   flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 1rem;
 }
 
@@ -32,24 +33,25 @@
   width: 40px;
   height: 40px;
   border-radius: 0.6rem;
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.3);
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #facc15;
+  color: var(--accent-light);
 }
 
 .totals-panel-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #f8fafc;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 400;
+  color: var(--text-primary);
   margin: 0 0 0.25rem 0;
 }
 
 .totals-panel-subtitle {
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   margin: 0;
 }
 
@@ -64,19 +66,20 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8125rem;
-  color: #94a3b8;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   padding: 0.35rem 0.75rem;
   border-radius: 9999px;
 }
 
 .totals-stat-pill strong {
-  color: #f8fafc;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
 }
 
-/* Leaderboard Table */
+/* Leaderboard table */
 .totals-leaderboard {
   width: 100%;
   display: flex;
@@ -88,12 +91,13 @@
   display: grid;
   grid-template-columns: 60px 1fr 120px 180px;
   padding: 0.6rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .totals-table-body {
@@ -108,19 +112,19 @@
   align-items: center;
   padding: 0.85rem 1rem;
   border-radius: 0.6rem;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
   transition: all 0.15s ease;
 }
 
 .totals-table-row:hover {
-  background: rgba(30, 41, 59, 0.7);
-  border-color: rgba(99, 102, 241, 0.25);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-accent);
 }
 
 .totals-table-row.is-leader {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.3);
+  background: var(--accent-surface);
+  border-color: var(--border-accent);
 }
 
 .rank-badge {
@@ -130,28 +134,24 @@
   width: 32px;
   height: 24px;
   border-radius: 0.35rem;
-  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.06);
-  color: #94a3b8;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
 }
 
 .rank-badge.rank-1 {
-  background: rgba(234, 179, 8, 0.2);
-  color: #fde047;
-  border: 1px solid rgba(234, 179, 8, 0.4);
+  background: var(--accent-surface);
+  color: var(--accent-light);
+  border: 1px solid var(--border-accent);
 }
 
-.rank-badge.rank-2 {
-  background: rgba(203, 213, 225, 0.2);
-  color: #f1f5f9;
-  border: 1px solid rgba(203, 213, 225, 0.4);
-}
-
+.rank-badge.rank-2,
 .rank-badge.rank-3 {
-  background: rgba(217, 119, 6, 0.2);
-  color: #fdba74;
-  border: 1px solid rgba(217, 119, 6, 0.4);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
 }
 
 .totals-candidate-meta {
@@ -164,23 +164,25 @@
 .totals-candidate-name {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .leader-pill {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
   padding: 0.15rem 0.5rem;
   border-radius: 9999px;
-  background: rgba(234, 179, 8, 0.15);
-  color: #facc15;
-  border: 1px solid rgba(234, 179, 8, 0.3);
+  background: var(--accent-surface);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-accent);
 }
 
 .totals-col-votes {
   font-size: 0.9375rem;
-  color: #e2e8f0;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
 }
 
 .totals-share-wrapper {
@@ -190,9 +192,10 @@
 }
 
 .totals-share-text {
-  font-size: 0.8125rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #94a3b8;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
   min-width: 42px;
   text-align: right;
 }
@@ -200,7 +203,7 @@
 .totals-bar-track {
   flex: 1;
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-elevated);
   border-radius: 9999px;
   overflow: hidden;
 }

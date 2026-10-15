@@ -1,69 +1,78 @@
-.features{
-    padding:100px 0;
-    background:#111827;
+/* =========================================================
+   Features — Aura Design System
+   ========================================================= */
+
+.features {
+  padding: 100px 0;
+  background: var(--bg-surface);
+  transition: background-color 0.3s ease;
 }
 
-.section-title{
-    text-align:center;
-    margin-bottom:70px;
+.section-title {
+  text-align: center;
+  margin-bottom: 70px;
 }
 
-.section-title h2{
-    /* The landing sections keep dark navy backgrounds in every scheme, so
-       headings must not inherit index.css's light-scheme near-black. */
-    color:#f1f5f9;
-    font-size:48px;
-    margin-bottom:15px;
+.section-title h2 {
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+  margin-bottom: 15px;
 }
 
-.section-title p{
-    color:#94a3b8;
-    width:700px;
-    max-width:90%;
-    margin:auto;
-    line-height:1.8;
+.section-title p {
+  color: var(--text-secondary);
+  width: 700px;
+  max-width: 90%;
+  margin: auto;
+  line-height: 1.8;
 }
 
-.feature-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-    gap:30px;
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 30px;
 }
 
-.feature-card{
-    background:#1e293b;
-    border-radius:20px;
-    padding:40px;
-    transition:.4s;
-    border:1px solid rgba(255,255,255,.08);
+.feature-card {
+  background: var(--bg-base);
+  border-radius: 20px;
+  padding: 40px;
+  transition: transform 0.35s ease, border-color 0.35s ease,
+    box-shadow 0.35s ease;
+  border: 1px solid var(--border-subtle);
 }
 
-.feature-card:hover{
-    transform:translateY(-10px);
-    border-color:#2563eb;
-    box-shadow:0 20px 40px rgba(37,99,235,.25);
+.feature-card:hover {
+  transform: translateY(-8px);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-.feature-icon{
-    width:70px;
-    height:70px;
-    border-radius:50%;
-    background:#2563eb;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:32px;
-    margin-bottom:25px;
+.feature-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-light);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 30px;
+  margin-bottom: 25px;
 }
 
-.feature-card h3{
-    /* Dark card backgrounds in every scheme — keep headings light. */
-    color:#f1f5f9;
-    margin-bottom:15px;
-    font-size:24px;
+.feature-card h3 {
+  color: var(--text-primary);
+  margin-bottom: 15px;
+  font-size: 1.3rem;
 }
 
-.feature-card p{
-    color:#cbd5e1;
-    line-height:1.8;
+.feature-card p {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  font-size: 0.95rem;
 }

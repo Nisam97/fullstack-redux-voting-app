@@ -157,13 +157,13 @@ function Login() {
   };
 
   return (
-    <div className="login-page" style={{ flexDirection: "column", minHeight: "100vh", padding: 0 }}>
+    <div className="login-page login-page--stacked">
       <Navbar />
 
-      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+      <main className="login-main">
         <div className="login-card">
           <div className="login-header">
-            <h1 style={{ fontSize: "1.8rem" }}>
+            <h1>
               {mode === "voter" ? "Voter Sign In" : "Administrator Portal"}
             </h1>
             <p>
@@ -174,42 +174,15 @@ function Login() {
           </div>
 
           {error && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "8px",
-                background: "rgba(239, 68, 68, 0.15)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                color: "#fca5a5",
-                fontSize: "0.85rem",
-                marginBottom: "1.25rem"
-              }}
-              role="alert"
-            >
-              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <div className="auth-alert auth-alert-error" role="alert">
+              <AlertCircle size={18} className="auth-alert-icon" aria-hidden="true" />
               <span>{error}</span>
             </div>
           )}
 
           {infoMessage && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "8px",
-                background: "rgba(16, 185, 129, 0.15)",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
-                color: "#6ee7b7",
-                fontSize: "0.85rem",
-                marginBottom: "1.25rem"
-              }}
-            >
-              <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+            <div className="auth-alert auth-alert-success">
+              <CheckCircle2 size={18} className="auth-alert-icon" aria-hidden="true" />
               <span>{infoMessage}</span>
             </div>
           )}
@@ -218,8 +191,8 @@ function Login() {
             step === 1 ? (
               <form onSubmit={handleVoterRequestOtp}>
                 <div className="input-group">
-                  <label htmlFor="voter-email" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                    <Mail size={16} /> Email Address
+                  <label htmlFor="voter-email" className="input-label-with-icon">
+                    <Mail size={16} aria-hidden="true" /> Email Address
                   </label>
                   <input
                     id="voter-email"
@@ -237,34 +210,33 @@ function Login() {
                   type="submit"
                   className="login-btn"
                   disabled={loading || cooldownSeconds > 0}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
                 >
                   {loading ? "Sending Code..." : cooldownSeconds > 0 ? `Please wait (${cooldownSeconds}s)` : (
                     <>
-                      Send Login Code <ArrowRight size={18} />
+                      Send Login Code <ArrowRight size={18} aria-hidden="true" />
                     </>
                   )}
                 </button>
               </form>
             ) : (
               <form onSubmit={handleVoterVerifyOtp}>
-                <div style={{ textAlign: "center", marginBottom: "1.5rem", color: "#cbd5e1", fontSize: "0.9rem" }}>
-                  Enter the 6-digit code sent to <strong style={{ color: "#38bdf8" }}>{email}</strong>
+                <div className="otp-hint">
+                  Enter the 6-digit code sent to <strong className="otp-email">{email}</strong>
                 </div>
 
                 <div className="input-group">
-                  <label htmlFor="voter-code" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                    <KeyRound size={16} /> 6-Digit Code
+                  <label htmlFor="voter-code" className="input-label-with-icon">
+                    <KeyRound size={16} aria-hidden="true" /> 6-Digit Code
                   </label>
                   <input
                     id="voter-code"
                     type="text"
+                    className="otp-code-input"
                     placeholder="123456"
                     value={code}
                     onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                     disabled={loading}
                     maxLength={6}
-                    style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: "bold" }}
                     required
                     autoFocus
                   />
@@ -274,35 +246,25 @@ function Login() {
                   type="submit"
                   className="login-btn"
                   disabled={loading || code.trim().length !== 6}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
                 >
                   {loading ? "Verifying..." : "Verify & Sign In"}
                 </button>
 
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+                <div className="login-actions-row">
                   <button
                     type="button"
+                    className="link-btn"
                     onClick={() => { setStep(1); setError(null); setInfoMessage(null); }}
-                    style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.85rem" }}
                   >
                     Change email
                   </button>
                   <button
                     type="button"
+                    className="link-btn link-btn-accent"
                     onClick={handleResend}
                     disabled={loading || cooldownSeconds > 0}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: cooldownSeconds > 0 ? "#64748b" : "#38bdf8",
-                      cursor: cooldownSeconds > 0 ? "default" : "pointer",
-                      fontSize: "0.85rem",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.25rem"
-                    }}
                   >
-                    <RotateCw size={14} /> {cooldownSeconds > 0 ? `Resend code (${cooldownSeconds}s)` : "Resend code"}
+                    <RotateCw size={14} aria-hidden="true" /> {cooldownSeconds > 0 ? `Resend code (${cooldownSeconds}s)` : "Resend code"}
                   </button>
                 </div>
               </form>
@@ -338,53 +300,38 @@ function Login() {
 
               <button
                 type="submit"
-                className="login-btn"
+                className="login-btn login-btn--spaced"
                 disabled={loading}
-                style={{ width: "100%", marginTop: "0.5rem" }}
               >
                 {loading ? "Authenticating..." : "Admin Login"}
               </button>
             </form>
           )}
 
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", marginTop: "1.5rem", paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem" }}>
+          <div className="login-footer">
             {mode === "voter" ? (
               <>
-                <Link to="/register" style={{ color: "#38bdf8", textDecoration: "none", fontWeight: 500 }}>
+                <Link to="/register" className="login-link">
                   Need an account? Sign up
                 </Link>
                 <button
                   type="button"
+                  className="link-btn link-btn-accent"
                   onClick={() => { setMode("admin"); setError(null); setInfoMessage(null); }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#94a3b8",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.3rem"
-                  }}
                 >
-                  <Shield size={14} /> Admin Portal
+                  <Shield size={14} aria-hidden="true" /> Admin Portal
                 </button>
               </>
             ) : (
               <>
                 <button
                   type="button"
+                  className="link-btn link-btn-accent"
                   onClick={() => { setMode("voter"); setError(null); setInfoMessage(null); }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#38bdf8",
-                    cursor: "pointer",
-                    fontWeight: 500
-                  }}
                 >
                   ← Back to Voter Sign In
                 </button>
-                <span style={{ color: "#64748b" }}>Admin Access</span>
+                <span className="login-footer-note">Admin Access</span>
               </>
             )}
           </div>

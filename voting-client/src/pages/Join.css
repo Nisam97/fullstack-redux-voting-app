@@ -1,9 +1,16 @@
+/* =========================================================
+   Join — Aura Design System
+   ========================================================= */
+
 .join-page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-  color: #f8fafc;
+  background:
+    radial-gradient(circle at 50% 0%, var(--glow-color) 0%, transparent 45%),
+    var(--bg-base);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease;
 }
 
 .join-main {
@@ -11,50 +18,70 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 3rem 1.5rem;
+  /* The navbar is fixed and out of flow, so reserve its height (92px) plus a
+     normal gap before the centered card. */
+  padding: 7rem 1.5rem 3rem;
 }
 
 .join-card {
   width: 100%;
   max-width: 460px;
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
   padding: 2.5rem;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.join-card::before {
+  content: "";
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 55%;
+  background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .join-header {
   text-align: center;
   margin-bottom: 2rem;
+  position: relative;
 }
 
 .join-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  background: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: var(--accent-surface);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-accent);
   padding: 0.35rem 0.8rem;
   border-radius: 9999px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   margin-bottom: 1rem;
 }
 
 .join-header h1 {
-  font-size: 1.85rem;
-  font-weight: 700;
-  color: #ffffff;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.1rem;
+  line-height: 1.1;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .join-header p {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.95rem;
   line-height: 1.5;
 }
@@ -72,35 +99,38 @@
 }
 
 .join-input-wrapper label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #cbd5e1;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .join-code-field {
   width: 100%;
   padding: 1rem 1.25rem;
-  background: rgba(15, 23, 42, 0.8);
-  border: 2px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  color: #38bdf8;
+  color: var(--accent-light);
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: 0.35em;
   text-align: center;
   text-transform: uppercase;
   outline: none;
-  transition: all 0.2s ease;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: var(--font-mono);
 }
 
 .join-code-field:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-surface);
 }
 
 .join-code-field::placeholder {
-  color: #475569;
+  color: var(--text-muted);
   letter-spacing: 0.25em;
   font-size: 1.4rem;
 }
@@ -114,9 +144,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--status-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 45%, transparent);
+  color: var(--status-danger);
   padding: 0.75rem 1rem;
   border-radius: 10px;
   font-size: 0.9rem;
@@ -126,40 +156,37 @@
 .join-btn {
   width: 100%;
   padding: 1rem;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: #ffffff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
-  border-radius: 12px;
-  font-size: 1.05rem;
+  border-radius: 9999px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .join-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  background: var(--btn-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
 }
 
 .join-btn:disabled {
-  background: #334155;
-  color: #64748b;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   cursor: not-allowed;
-  box-shadow: none;
   transform: none;
 }
 
 .join-footer-hint {
   text-align: center;
   margin-top: 1.5rem;
-  font-size: 0.85rem;
-  color: #64748b;
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .join-spinner {

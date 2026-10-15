@@ -1,6 +1,10 @@
+/* =========================================================
+   VoteCard — Aura Design System
+   ========================================================= */
+
 .vote-card {
-  background: var(--surface, #1e293b);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
   padding: 36px 28px;
   display: flex;
@@ -10,7 +14,7 @@
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-soft);
   flex: 1;
   min-width: 260px;
   max-width: 380px;
@@ -18,14 +22,16 @@
 
 .vote-card:hover:not(.vote-card-inactive) {
   transform: translateY(-6px);
-  border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 18px 35px rgba(37, 99, 235, 0.25);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
 .vote-card.vote-card-voted {
-  border-color: #38bdf8;
-  background: linear-gradient(145deg, #1e293b 0%, rgba(37, 99, 235, 0.15) 100%);
-  box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+  border-color: var(--accent-primary);
+  background:
+    radial-gradient(circle at top, var(--accent-surface) 0%, transparent 70%),
+    var(--bg-surface);
+  box-shadow: var(--shadow-hover);
 }
 
 /*
@@ -36,7 +42,7 @@
   has when the card is active.
 */
 .vote-card.vote-card-inactive {
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-subtle);
   box-shadow: none;
   filter: grayscale(20%);
 }
@@ -45,8 +51,9 @@
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary, #2563eb), var(--secondary, #7c3aed));
-  color: #f8fafc;
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,18 +61,14 @@
   font-weight: 700;
   letter-spacing: 1px;
   margin-bottom: 24px;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
-  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow-soft);
 }
 
-/*
-  Both stops are checked against the white initials: #047857 is 5.24:1 and
-  #059669 is 3.6:1, so the lighter end still clears the 3:1 large-text bar at
-  28px bold. The previous #10b981 was 2.42:1 and failed it.
-*/
 .vote-card-voted .vote-card-avatar {
-  background: linear-gradient(135deg, #047857, #059669);
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+  background: color-mix(in srgb, var(--status-success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
+  color: var(--status-success);
+  box-shadow: none;
 }
 
 .vote-card-content {
@@ -74,11 +77,12 @@
 }
 
 .vote-card-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text, #f8fafc);
+  font-family: var(--font-serif);
+  font-size: 1.7rem;
+  font-weight: 400;
+  color: var(--text-primary);
   margin: 0 0 12px 0;
-  line-height: 1.3;
+  line-height: 1.25;
   word-break: break-word;
 }
 
@@ -86,21 +90,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   padding: 4px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  color: var(--accent, #38bdf8);
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  color: var(--accent-primary);
 }
 
 .tally-count {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 0.95rem;
+  font-family: var(--font-mono);
 }
 
 .tally-label {
-  color: var(--muted, #94a3b8);
+  color: var(--text-muted);
 }
 
 .vote-card-action {
@@ -111,11 +116,11 @@
 .vote-btn {
   width: 100%;
   padding: 14px 28px;
-  border-radius: 40px;
+  border-radius: 9999px;
   border: none;
-  background: linear-gradient(135deg, var(--primary, #2563eb), #1d4ed8);
-  color: #f8fafc;
-  font-size: 16px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
@@ -123,42 +128,35 @@
   justify-content: center;
   gap: 8px;
   transition: all 0.25s ease;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
 }
 
 .vote-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  background: var(--btn-primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
 }
 
 .vote-btn:focus-visible {
-  outline: 3px solid var(--accent, #38bdf8);
+  outline: 3px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
 /*
-  A flat slate fill rather than `opacity: 0.6`, for the same reason: opacity
-  dims the label along with the fill. #e2e8f0 on #334155 is 7.4:1, and a flat
-  fill is a background a contrast checker can actually resolve, unlike the
-  gradient it replaces.
+  A flat fill rather than `opacity: 0.6`, for the same reason: opacity dims the
+  label along with the fill. The muted surface keeps a resolvable, high
+  contrast background in both themes, unlike a hardcoded slate.
 */
 .vote-btn:disabled {
   cursor: not-allowed;
-  background: #334155;
-  color: #e2e8f0;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   box-shadow: none;
   transform: none;
 }
 
-/*
-  The button label is 16px, so both stops have to clear 4.5:1 against white:
-  #047857 is 5.24:1 and #065f46 is 7.34:1. The old pair ran 3.6:1 to 2.42:1,
-  which failed AA while a round was still open and the voted button was live.
-*/
 .vote-btn.vote-btn-voted {
-  background: linear-gradient(135deg, #047857, #065f46);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+  background: color-mix(in srgb, var(--status-success) 18%, transparent);
+  color: var(--status-success);
+  border: 1px solid color-mix(in srgb, var(--status-success) 40%, transparent);
 }
 
 .vote-btn-icon {

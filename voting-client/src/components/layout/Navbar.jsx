@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { isAdminLoggedIn, logoutAdmin, getAdminUser, logoutVoter } from "../../services/auth";
 import { selectCurrentVoter, selectIsVoterLoggedIn, clearVoterAuth } from "../../redux/voterAuthSlice";
-import { LogOut, User, Shield } from "lucide-react";
+import { getTheme, toggleTheme, subscribeTheme } from "../../services/theme";
+import { LogOut, Moon, Sun, Shield, User, Vote } from "lucide-react";
 import "./Navbar.css";
 
 function Navbar() {
@@ -14,6 +15,7 @@ function Navbar() {
   const [adminUser, setAdminUser] = useState(() => getAdminUser());
   const [voterLogoutError, setVoterLogoutError] = useState(null);
   const [voterLogoutPending, setVoterLogoutPending] = useState(false);
+  const [theme, setThemeState] = useState(() => getTheme());
 
   const currentVoter = useSelector(selectCurrentVoter);
   const isVoterLoggedIn = useSelector(selectIsVoterLoggedIn);
@@ -27,6 +29,9 @@ function Navbar() {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  // Keep the toggle in step with the document, wherever the change came from.
+  useEffect(() => subscribeTheme(setThemeState), []);
 
   const handleAdminLogout = () => {
     logoutAdmin();
@@ -71,11 +76,13 @@ function Navbar() {
     }
   };
 
+  const isLight = theme === "light";
+
   return (
     <header className="navbar">
       <div className="logo">
-        <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          🗳 <span>VoteSphere</span>
+        <Link to="/" className="logo-link">
+          <Vote size={22} aria-hidden="true" /> <span>VoteSphere</span>
         </Link>
       </div>
 
@@ -86,70 +93,46 @@ function Navbar() {
         {isAdmin && <Link to="/admin">Admin</Link>}
       </nav>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div className="navbar-actions">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={isLight ? "Switch to dark theme" : "Switch to light theme"}
+          title={isLight ? "Switch to dark theme" : "Switch to light theme"}
+        >
+          {isLight ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
+        </button>
+
         {isAdmin ? (
           <>
-            <span
-              style={{
-                fontSize: "0.8rem",
-                color: "#818cf8",
-                background: "rgba(99, 102, 241, 0.15)",
-                padding: "0.25rem 0.6rem",
-                borderRadius: "9999px",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                gap: "0.3rem"
-              }}
-            >
-              <Shield size={14} /> Admin: {adminUser?.username || "admin"}
+            <span className="navbar-chip navbar-chip-admin">
+              <Shield size={14} aria-hidden="true" /> Admin: {adminUser?.username || "admin"}
             </span>
             <button
               onClick={handleAdminLogout}
-              className="login-btn"
-              style={{ background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.4)" }}
+              className="login-btn logout-btn logout-btn-admin"
             >
               Logout
             </button>
           </>
         ) : isVoterLoggedIn ? (
           <>
-            <span
-              style={{
-                fontSize: "0.85rem",
-                color: "#38bdf8",
-                background: "rgba(56, 189, 248, 0.12)",
-                padding: "0.3rem 0.75rem",
-                borderRadius: "9999px",
-                fontWeight: 500,
-                display: "flex",
-                alignItems: "center",
-                gap: "0.35rem"
-              }}
-            >
-              <User size={14} /> Hi, {currentVoter?.name || currentVoter?.username || "Voter"}
+            <span className="navbar-chip navbar-chip-voter">
+              <User size={14} aria-hidden="true" /> Hi, {currentVoter?.name || currentVoter?.username || "Voter"}
             </span>
             <button
               onClick={handleVoterLogout}
-              className="login-btn"
+              className="login-btn logout-btn logout-btn-voter"
               data-testid="logout-btn"
               // Disabled while the request is in flight, so a slow server cannot
               // be double clicked into two sign out requests. aria-busy tells an
               // assistive tech user the control is working, not broken.
               disabled={voterLogoutPending}
               aria-busy={voterLogoutPending}
-              style={{
-                background: "rgba(239, 68, 68, 0.15)",
-                color: "#fca5a5",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.3rem",
-                cursor: voterLogoutPending ? "progress" : "pointer",
-                opacity: voterLogoutPending ? 0.7 : 1
-              }}
             >
-              <LogOut size={14} /> {voterLogoutPending ? "Signing out\u2026" : "Log out"}
+              <LogOut size={14} aria-hidden="true" />
+              {voterLogoutPending ? "Signing out\u2026" : "Log out"}
             </button>
             {voterLogoutError && (
               // Positioned below the bar rather than inline: the navbar is
@@ -158,40 +141,20 @@ function Navbar() {
               <p
                 role="alert"
                 data-testid="voter-logout-error"
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  right: "8%",
-                  margin: "0.5rem 0 0 0",
-                  maxWidth: "min(340px, 80vw)",
-                  padding: "0.5rem 0.75rem",
-                  background: "rgba(15, 23, 42, 0.95)",
-                  border: "1px solid rgba(239, 68, 68, 0.45)",
-                  borderRadius: "8px",
-                  color: "#fca5a5",
-                  fontSize: "0.8rem",
-                  lineHeight: 1.35,
-                  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.45)"
-                }}
+                className="navbar-error"
               >
                 {voterLogoutError}
               </p>
             )}
           </>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            {/* A button wrapped in a link nests two interactive controls: the
-                link and the button are both exposed, so the same control is
-                announced and focused twice. One link styled as the button is
-                the whole control. */}
-            <Link
-              to="/login"
-              className="login-btn"
-              style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
-            >
-              Sign in
-            </Link>
-          </div>
+          // A button wrapped in a link nests two interactive controls: the
+          // link and the button are both exposed, so the same control is
+          // announced and focused twice. One link styled as the button is
+          // the whole control.
+          <Link to="/login" className="login-btn">
+            Sign in
+          </Link>
         )}
       </div>
     </header>

@@ -1,29 +1,27 @@
+import { UserCheck, KeyRound, CheckCircle2, LineChart } from "lucide-react";
 import "./HowItWorks.css";
-import { BsPersonCheckFill, BsCheckCircleFill } from "react-icons/bs";
-import { FaVoteYea } from "react-icons/fa";
-import { MdOutlineLeaderboard } from "react-icons/md";
 
 function HowItWorks() {
   const steps = [
     {
-      icon: <BsPersonCheckFill />,
-      title: "Register Account",
-      text: "Create your secure account and verify your identity before participating."
+      icon: UserCheck,
+      title: "Sign In",
+      text: "Verify your email with a one-time code. No password to create or remember."
     },
     {
-      icon: <FaVoteYea />,
+      icon: KeyRound,
+      title: "Join the Session",
+      text: "Enter the 6-character join code from the organizer, or scan the lobby QR code."
+    },
+    {
+      icon: CheckCircle2,
       title: "Cast Your Vote",
-      text: "Vote quickly with a secure and transparent voting experience."
+      text: "Pick a candidate in a ballot, or a winner in each pairwise matchup."
     },
     {
-      icon: <BsCheckCircleFill />,
-      title: "Vote Verification",
-      text: "Every vote is verified instantly to ensure complete integrity."
-    },
-    {
-      icon: <MdOutlineLeaderboard />,
-      title: "View Live Results",
-      text: "Watch results update in real time using WebSocket technology."
+      icon: LineChart,
+      title: "Watch Live Results",
+      text: "Tallies and round results update in real time, computed on the server."
     }
   ];
 
@@ -40,8 +38,8 @@ function HowItWorks() {
         </h2>
 
         <p>
-          Fast, secure and transparent voting experience
-          built for universities, organizations and events.
+          From email sign-in to live results, every step
+          runs in the browser, on desktop or mobile.
         </p>
       </div>
 
@@ -49,14 +47,14 @@ function HowItWorks() {
 
         {steps.map((step, index) => (
 
-          <div className="step-card" key={index}>
+          <div className="step-card" key={step.title}>
 
             <div className="step-number">
               0{index + 1}
             </div>
 
             <div className="step-icon">
-              {step.icon}
+              <step.icon size={30} aria-hidden="true" />
             </div>
 
             <h3>{step.title}</h3>

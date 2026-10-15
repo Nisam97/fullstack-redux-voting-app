@@ -179,7 +179,7 @@ function History() {
           {!loading && error && (
             <section className="history-status-card" aria-live="assertive">
               <div className="history-status-icon">
-                <AlertCircle size={44} style={{ color: '#ef4444' }} aria-hidden="true" />
+                <AlertCircle size={44} style={{ color: 'var(--status-danger)' }} aria-hidden="true" />
               </div>
               <h2 className="history-card-title">Failed to Load History</h2>
               <p className="history-card-desc">
@@ -200,7 +200,7 @@ function History() {
           {!loading && !error && items.length === 0 && (
             <section className="history-status-card" aria-live="polite">
               <div className="history-status-icon">
-                <AlertCircle size={44} style={{ color: '#94a3b8' }} aria-hidden="true" />
+                <AlertCircle size={44} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
               </div>
               <h2 className="history-card-title">No Completed Tournaments Yet</h2>
               <p className="history-card-desc">
@@ -326,7 +326,7 @@ function History() {
                           <AlertCircle size={20} className="history-trophy-icon" aria-hidden="true" />
                         )}
                         <div>
-                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#eab308', display: 'block', fontWeight: 600 }}>
+                          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--status-warning)', display: 'block', fontWeight: 600 }}>
                             {hasWinner ? 'Official Champion' : 'Outcome'}
                           </span>
                           <span className="history-winner-text" data-testid="history-winner-text">

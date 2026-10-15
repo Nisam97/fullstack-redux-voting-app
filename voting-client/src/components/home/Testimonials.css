@@ -1,43 +1,58 @@
-.testimonials{
-    padding:100px 0;
-    background:#111827;
+/* =========================================================
+   Trust / Strengths — Aura Design System
+   ========================================================= */
+
+.testimonials {
+  padding: 100px 0;
+  background: var(--bg-surface);
+  transition: background-color 0.3s ease;
 }
 
-.testimonial-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-    gap:30px;
+.testimonial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
 }
 
-.testimonial-card{
-    background:#1e293b;
-    padding:35px;
-    border-radius:20px;
-    transition:.3s;
-    border:1px solid rgba(255,255,255,.08);
+.testimonial-card {
+  background: var(--bg-base);
+  padding: 35px;
+  border-radius: 20px;
+  transition: transform 0.3s ease, border-color 0.3s ease,
+    box-shadow 0.3s ease;
+  border: 1px solid var(--border-subtle);
 }
 
-.testimonial-card:hover{
-    transform:translateY(-10px);
+.testimonial-card:hover {
+  transform: translateY(-8px);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-.quote{
-    color:#facc15;
-    font-size:22px;
-    margin-bottom:20px;
+.quote {
+  color: var(--accent-light);
+  font-size: 26px;
+  margin-bottom: 20px;
 }
 
-.testimonial-card p{
-    color:#cbd5e1;
-    line-height:1.8;
+.testimonial-card p {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  font-size: 0.95rem;
 }
 
-.testimonial-card h3{
-    /* Dark card backgrounds in every scheme — keep headings light. */
-    color:#f1f5f9;
-    margin-top:25px;
+.testimonial-card h3 {
+  color: var(--text-primary);
+  margin-top: 25px;
+  font-size: 1.15rem;
 }
 
-.testimonial-card span{
-    color:#38bdf8;
+.testimonial-card span {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }

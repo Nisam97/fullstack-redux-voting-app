@@ -25,6 +25,25 @@ jobs:
       - name: Verify generated API contract table is current
         run: node scripts/generate-api-contract-table.mjs --check
 
+  context-pointers:
+    name: Context Files Point Only At Real Paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Reads AGENTS.md and CLAUDE.md at every level and fails when one of them
+      # points at a path that does not exist. No install step is needed: the
+      # check uses Node built-ins and the git the runner already has, the same
+      # way the contract generator above does.
+      - name: Verify context file pointers resolve
+        run: node scripts/check-context-pointers.mjs
+
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest

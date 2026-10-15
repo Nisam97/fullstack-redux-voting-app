@@ -1,16 +1,17 @@
-/* Admin Panel Styles */
+/* =========================================================
+   Admin Panel — Aura Design System
+   ========================================================= */
+
 .admin-page {
   min-height: 100vh;
-  background-color: #0f172a;
-  color: #f8fafc;
-  font-family: inherit;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  transition: background-color 0.3s ease;
 }
 
 /* The navbar is `position: fixed`, so it takes no space in the document flow
-   and sits on top of whatever renders first in `main`. With the old 2rem top
-   padding the admin header row landed underneath the bar, which does not just
-   hide it: a click there hit-tests through to the navbar, and the button's own
-   area overlaps Logout, so using it signed the admin out. Reserve the navbar's
+   and sits on top of whatever renders first in `main`. Reserve the navbar's
    height (92px) plus a normal gap before the header starts. */
 .admin-main {
   max-width: 1200px;
@@ -18,7 +19,7 @@
   padding: 7rem 1.5rem 4rem 1.5rem;
 }
 
-/* Header & Controls */
+/* Header & controls */
 .admin-header {
   display: flex;
   justify-content: space-between;
@@ -29,22 +30,24 @@
 }
 
 .admin-title-area h1 {
-  font-size: 2rem;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.2rem;
+  line-height: 1.15;
   margin: 0 0 0.5rem 0;
-  color: #f8fafc;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
 .admin-subtitle {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.95rem;
   margin: 0;
 }
 
-/* Metric Stats Grid */
+/* Metric stats grid */
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -53,9 +56,9 @@
 }
 
 .admin-stat-card {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
@@ -65,34 +68,36 @@
 
 .admin-stat-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(99, 102, 241, 0.4);
+  border-color: var(--border-accent);
 }
 
 .admin-stat-label {
-  font-size: 0.8rem;
-  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
 
 .admin-stat-val {
-  font-size: 1.85rem;
-  font-weight: 700;
-  color: #f8fafc;
+  font-family: var(--font-serif);
+  font-size: 1.9rem;
+  font-weight: 400;
+  color: var(--text-primary);
 }
 
-/* Creation Card & Form */
+/* Cards & forms */
 .admin-card {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
   padding: 1.75rem;
   margin-bottom: 2rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-soft);
 }
 
 .admin-card-header {
@@ -131,56 +136,64 @@
 }
 
 .admin-form-group label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #cbd5e1;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* Field labels are the primary affordance, so they follow the design
+     system's own label token (.field-label uses --text-secondary). Muted
+     measured 3.82:1 here, below the 4.5:1 minimum. */
+  color: var(--text-secondary);
 }
 
 .admin-input,
 .admin-textarea {
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   padding: 0.65rem 0.9rem;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 0.95rem;
+  font-family: var(--font-sans);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .admin-input:focus,
 .admin-textarea:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-surface);
 }
 
 .admin-help-text {
   font-size: 0.75rem;
-  color: #94a3b8;
+  /* Helper copy is read before typing, so it clears AA in both themes. */
+  color: var(--text-secondary);
   margin-top: 0.2rem;
 }
 
-/* Action Buttons */
+/* Action buttons */
 .admin-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
   padding: 0.55rem 1rem;
-  border-radius: 8px;
+  border-radius: 9999px;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.2s ease;
   text-decoration: none;
-  background: #334155;
-  color: #f8fafc;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .admin-btn:hover:not(:disabled) {
-  opacity: 0.95;
   transform: translateY(-1px);
+  border-color: var(--border-strong);
 }
 
 .admin-btn:disabled {
@@ -190,63 +203,67 @@
 }
 
 .admin-btn-primary {
-  background: #6366f1;
-  color: #ffffff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .admin-btn-primary:hover:not(:disabled) {
-  background: #4f46e5;
+  background: var(--btn-primary-hover);
 }
 
 .admin-btn-success {
-  background: #22c55e;
-  color: #ffffff;
+  background: var(--status-success-bg);
+  color: var(--status-success);
+  border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
 }
 
 .admin-btn-success:hover:not(:disabled) {
-  background: #16a34a;
+  background: color-mix(in srgb, var(--status-success) 22%, transparent);
 }
 
 .admin-btn-warning {
-  background: #f59e0b;
-  color: #ffffff;
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+  border-color: color-mix(in srgb, var(--status-warning) 40%, transparent);
 }
 
 .admin-btn-warning:hover:not(:disabled) {
-  background: #d97706;
+  background: color-mix(in srgb, var(--status-warning) 22%, transparent);
 }
 
 .admin-btn-danger {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.4);
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+  border-color: color-mix(in srgb, var(--status-danger) 40%, transparent);
 }
 
 .admin-btn-danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--status-danger) 22%, transparent);
 }
 
 .admin-btn-outline {
   background: transparent;
-  border-color: rgba(148, 163, 184, 0.3);
-  color: #cbd5e1;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .admin-btn-outline:hover:not(:disabled) {
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-accent);
+  color: var(--accent-primary);
 }
 
 .admin-btn-sky {
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.3);
+  background: var(--accent-surface);
+  color: var(--accent-primary);
+  border-color: var(--border-accent);
 }
 
 .admin-btn-sky:hover:not(:disabled) {
-  background: rgba(56, 189, 248, 0.25);
+  background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
 }
 
-/* Sessions List */
+/* Sessions list */
 .admin-sessions-list {
   display: flex;
   flex-direction: column;
@@ -254,9 +271,9 @@
 }
 
 .admin-session-item {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -265,7 +282,7 @@
 }
 
 .admin-session-item:hover {
-  border-color: rgba(148, 163, 184, 0.3);
+  border-color: var(--border-strong);
 }
 
 .admin-session-header {
@@ -280,70 +297,68 @@
   font-size: 1.2rem;
   font-weight: 700;
   margin: 0;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .admin-session-id {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  font-family: monospace;
+  font-size: 0.78rem;
+  /* Spec 0008/design pass: identifiers are content, and --text-muted only
+     reaches 3.82:1 (dark) / 3.85:1 (light) on the card surface. */
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
 }
 
-/* Status Badges */
+/* Status badges */
 .admin-status-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.2rem 0.65rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
 }
 
 .admin-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
 
 .admin-badge-pending {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-}
-.admin-badge-pending .admin-status-dot {
-  background: #fbbf24;
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+  border-color: color-mix(in srgb, var(--status-warning) 35%, transparent);
 }
 
 .admin-badge-open {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
-}
-.admin-badge-open .admin-status-dot {
-  background: #4ade80;
+  background: var(--status-success-bg);
+  color: var(--status-success);
+  border-color: color-mix(in srgb, var(--status-success) 35%, transparent);
 }
 
 .admin-badge-completed {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-}
-.admin-badge-completed .admin-status-dot {
-  background: #c084fc;
+  background: var(--accent-surface);
+  color: var(--accent-light);
+  border-color: var(--border-accent);
 }
 
 .admin-badge-archived {
-  background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
-}
-.admin-badge-archived .admin-status-dot {
-  background: #94a3b8;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
 }
 
-/* Live Round / Tournament Preview */
+/* Live round / tournament preview */
 .admin-round-preview {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   padding: 0.75rem 1rem;
   display: flex;
   align-items: center;
@@ -360,20 +375,22 @@
 }
 
 .admin-candidate-chip {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border-radius: 6px;
-  padding: 0.25rem 0.5rem;
+  background: var(--accent-surface);
+  color: var(--accent-light);
+  border: 1px solid var(--border-accent);
+  border-radius: 9999px;
+  padding: 0.25rem 0.6rem;
   font-weight: 600;
 }
 
 .admin-vs {
-  color: #64748b;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
-/* Footer / Controls Toolbar */
+/* Footer / controls toolbar */
 .admin-session-controls {
   display: flex;
   justify-content: space-between;
@@ -381,7 +398,7 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .admin-controls-group {
@@ -391,11 +408,11 @@
   flex-wrap: wrap;
 }
 
-/* Modal for QR Code */
+/* Modal */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.8);
+  background: color-mix(in srgb, var(--bg-base) 78%, transparent);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -405,13 +422,13 @@
 }
 
 .admin-modal-box {
-  background: #1e293b;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
   padding: 2rem;
   max-width: 440px;
   width: 100%;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-hover);
   text-align: center;
 }
 
@@ -437,11 +454,14 @@
 
 .admin-share-input {
   flex: 1;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
-  color: #94a3b8;
+  /* Read-only value, so it follows the design system's input rule
+     (.field-input uses --text-primary). At --text-muted this URL measured
+     3.16:1 on --bg-input in light mode, below the 4.5:1 minimum. */
+  color: var(--text-primary);
   font-size: 0.8rem;
 }
 
@@ -451,24 +471,24 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: 10px;
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
 }
 
 .admin-alert-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--status-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, transparent);
+  color: var(--status-danger);
 }
 
 .admin-alert-success {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #86efac;
+  background: var(--status-success-bg);
+  border: 1px solid color-mix(in srgb, var(--status-success) 40%, transparent);
+  color: var(--status-success);
 }
 
-/* Timer Duration Input in Creation Form */
+/* Timer duration input */
 .admin-timer-input-row {
   display: flex;
   align-items: center;
@@ -480,12 +500,12 @@
 }
 
 .admin-timer-unit {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   font-weight: 500;
 }
 
-/* Active Session Timer in Admin List */
+/* Active session timer in admin list */
 .admin-active-timer {
   display: flex;
   align-items: center;
@@ -497,7 +517,7 @@
   max-width: 320px;
 }
 
-/* Modal Variants & Structure */
+/* Modal variants */
 .admin-modal-box.admin-modal-lg {
   max-width: 640px;
   text-align: left;
@@ -510,7 +530,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.25rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.75rem;
 }
 
@@ -518,13 +538,13 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-/* Sessions Section Header */
+/* Sessions section header */
 .admin-sessions-section-header {
   display: flex;
   justify-content: space-between;
@@ -535,26 +555,27 @@
 }
 
 .admin-sessions-heading {
-  font-size: 1.35rem;
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.5rem;
   margin: 0;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
-/* Empty State Card */
+/* Empty state card */
 .admin-empty-card {
   text-align: center;
   padding: 3.5rem 1.5rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* Button Sizes & Variants */
+/* Button variants */
 .admin-btn-sm {
   padding: 0.4rem 0.8rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
 .admin-btn-lg {
@@ -566,30 +587,32 @@
 .admin-btn-create-header {
   padding: 0.65rem 1.25rem;
   font-size: 0.95rem;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  box-shadow: var(--shadow-soft);
 }
 
 .admin-btn-manage {
-  background: #4f46e5;
-  color: #ffffff;
+  background: var(--btn-accent-bg);
+  color: var(--btn-accent-text);
+  border-color: transparent;
   padding: 0.5rem 1rem;
 }
 
 .admin-btn-manage:hover:not(:disabled) {
-  background: #4338ca;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+  background: var(--btn-accent-hover);
 }
 
-/* Add Session Bottom Card */
+/* Add session card */
 .admin-session-add-card {
-  border: 2px dashed rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
   padding: 1.25rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
   background: transparent;
-  color: #94a3b8;
+  /* An action, not metadata: label it with the secondary text token so it
+     clears 4.5:1 (muted measured 4.06:1 on --bg-base). */
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -600,12 +623,12 @@
 }
 
 .admin-session-add-card:hover {
-  border-color: #6366f1;
-  color: #818cf8;
-  background: rgba(99, 102, 241, 0.05);
+  border-color: var(--border-accent);
+  color: var(--accent-primary);
+  background: var(--accent-surface);
 }
 
-/* Manage Modal Grid & Sections */
+/* Manage modal grid & sections */
 .admin-manage-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -614,15 +637,15 @@
 }
 
 .admin-manage-stat {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   padding: 0.75rem;
 }
 
 .admin-manage-stat-label {
-  font-size: 0.72rem;
-  color: #94a3b8;
+  font-size: 0.68rem;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
@@ -631,15 +654,16 @@
 }
 
 .admin-manage-stat-val {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #f8fafc;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--text-primary);
 }
 
 .admin-manage-section {
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   padding: 1.15rem;
   margin-bottom: 1.15rem;
 }
@@ -647,7 +671,7 @@
 .admin-manage-section-title {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--text-primary);
   margin: 0 0 0.75rem 0;
   display: flex;
   align-items: center;
@@ -660,4 +684,3 @@
   gap: 0.75rem;
   align-items: center;
 }
-

@@ -8,7 +8,7 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 
 | File | Owns |
 |---|---|
-| `src/main.jsx` | React root, mounts the route tree inside the Redux `Provider` |
+| `src/main.jsx` | React root: applies the stored theme, imports the one global stylesheet, then mounts the route tree inside the Redux `Provider` |
 | `src/routes/AppRoutes.jsx` | Route table for `/admin`, `/sessions/:id/lobby\|vote\|results`, `/history` |
 | `src/routes/AdminGuard.jsx` | Blocks `/admin` unless a valid admin JWT is present |
 | `src/routes/LegacyRedirects.jsx` | Backward compatible `/dashboard`, `/elections`, `/vote`, `/results` redirects |
@@ -19,9 +19,11 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 | `src/services/auth.js` | Admin JWT and session scoped voter token storage |
 | `src/services/history.js` | History, result, and rounds REST reads, all through `src/services/api.js` |
 | `src/services/api.js` | The one `fetch` for this app's own server: the `vs_voter` cookie, the admin Bearer header, the request timeout, and the error envelope every caller reads |
+| `src/services/theme.js` | The dual theme controller: `data-theme` on `<html>`, the `aura_theme` storage key, the system preference fallback, and the subscriber list |
+| `src/styles/theme.css` | The only global stylesheet: Aura tokens for both themes, plus the shared component classes every page reuses |
 | `src/pages/Home.jsx` | Home page, entry point for browsing active sessions |
 | `src/pages/Join.jsx` | Session join code entry and auto resolution at `/join` |
-| `src/pages/Register.jsx` | Static registration form, no real backend wiring, slated for rework |
+| `src/pages/Register.jsx` | Voter registration flow: details form, OTP request and verification via `services/auth.js` |
 | `src/pages/Voting.jsx` | Pairwise voting arena, timer guard, vote dispatch |
 | `src/pages/Admin.jsx` | Admin dashboard, session lifecycle controls, and tie resolution panel |
 | `src/pages/Lobby.jsx` | Voter waiting room, join QR code, and real time headcount |
@@ -42,7 +44,9 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 - A new server event is wired in `services/socket.js` (incoming, socket to store) and its action type added to the right Set in `redux/store.js`.
 - Selectors live in `voteSlice.js`, take `(state, sessionId?)`, fall back to the active session, and tolerate being handed either the root store state or the slice state.
 - Round scoped rendering is keyed by `getSessionPairLockKey(sessionId, pair)` so stale round data cannot leak into the next round.
-- Styling is plain CSS files sitting beside each component. There is no CSS framework or Tailwind.
+- Styling is plain CSS files sitting beside each component. There is no CSS framework or Tailwind. Component CSS reads the shared tokens instead of hardcoded colours, and every light value is a token override under `[data-theme="light"]`. Icons come from `lucide-react`.
+- The theme is one attribute on `<html>`, never a second stylesheet, and it has to be resolved before the first paint: `index.html` sets it inline, then `main.jsx` calls `initTheme()` to match. `src/services/theme.js` is the only writer, so a component never reads storage itself.
+- Design system (that file is the design.md the skill system looks for): build all UI to `docs/design_system_guidelines.md` (the Aura art direction and the product bar); token values live in `src/styles/theme.css`.
 - Unit tests are colocated in `test/**/*_spec.js` and run with `node --test` and `node:assert/strict`, importing the source modules directly. They exercise reducers, selectors, and store middleware, with no DOM needed.
 - Component tests are colocated in `test/*.test.jsx` and run under Vitest with jsdom (configured in `vitest.config.js`, shared setup in `test/vitest.setup.js`). They mount real components and assert on rendered output, so use them when the thing under test is what the user sees.
 - `npm test` runs both suites. The unit script globs `test/**/*_spec.js`, so a new spec file is picked up with no script edit; Vitest globs its own `.test.jsx` files.
@@ -67,7 +71,7 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 - The countdown on screen is visual only. A client that reaches `00:00` does nothing; the server closes the round and broadcasts the next state.
 - Tokens live in browser storage and are attached at dispatch time. They must never be written into Redux, and `normalizeSession` strips them if a payload carries one.
 - Results are deliberately hidden during an active round. Do not read tallies or percentages from `vote` while `roundLifecycle` is `VOTING`.
-- Two components are named `CountdownTimer` (`src/components/CountdownTimer.jsx` and `src/components/voting/CountdownTimer.jsx`). Check which one you are editing.
+- `CountdownTimer` lives at `src/components/CountdownTimer.jsx`; the old duplicate re-export under `src/components/voting/` was removed as dead code.
 
 ## Agent skills
 

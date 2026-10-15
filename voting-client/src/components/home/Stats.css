@@ -1,36 +1,61 @@
-.stats{
-    padding:90px 8%;
-    background:#0f1d3a;
+/* =========================================================
+   Stats strip — Aura Design System
+   ========================================================= */
+
+.stats {
+  padding: 90px 8%;
+  background: var(--bg-base);
+  transition: background-color 0.3s ease;
 }
 
-.stats-container{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:25px;
+.stats-container {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 25px;
 }
 
-.stat-card{
-    background:rgba(255,255,255,.05);
-    backdrop-filter:blur(15px);
-    border:1px solid rgba(255,255,255,.08);
-    border-radius:20px;
-    padding:40px;
-    text-align:center;
-    transition:.4s;
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  transition: transform 0.35s ease, border-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
-.stat-card:hover{
-    transform:translateY(-10px);
-    box-shadow:0 20px 40px rgba(0,0,0,.3);
+.stat-card:hover {
+  transform: translateY(-8px);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-.stat-card h2{
-    color:#2f80ed;
-    font-size:48px;
-    margin-bottom:10px;
+.stat-card h2 {
+  color: var(--accent-light);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 3rem;
+  line-height: 1.05;
+  margin-bottom: 10px;
 }
 
-.stat-card p{
-    color:#d7d7d7;
-    font-size:18px;
+.stat-card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 1000px) {
+  .stats-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .stats {
+    padding: 70px 20px;
+  }
+
+  .stats-container {
+    grid-template-columns: 1fr;
+  }
 }

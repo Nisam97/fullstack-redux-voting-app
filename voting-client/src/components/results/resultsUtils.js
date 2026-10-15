@@ -12,7 +12,9 @@ import { isTimerExpired } from '../../utils/timerUtils.js';
  * Contender 1: Indigo/Cyan
  * Contender 2: Violet/Rose
  */
-export const CONTENDER_COLORS = ['#6366f1', '#ec4899'];
+// Aura Design System contender palette: warm copper and deeper terracotta, so
+// pairwise bars read as the brand rather than default indigo/magenta.
+export const CONTENDER_COLORS = ['#e0936e', '#b85c37'];
 
 /**
  * Escapes one CSV cell (RFC 4180).
@@ -442,8 +444,8 @@ export const RESOLUTION_LABELS = {
   no_result: 'No Result',
   zero_vote_replay: 'Zero-Vote Replay',
   WINNER: 'Winner',
-  TIE_REQUEUED: 'Tie — Re-queued',
-  TIE_COIN_TOSS: 'Tie — Decided by coin toss'
+  TIE_REQUEUED: 'Tie: Re-queued',
+  TIE_COIN_TOSS: 'Tie: Decided by coin toss'
 };
 
 /**

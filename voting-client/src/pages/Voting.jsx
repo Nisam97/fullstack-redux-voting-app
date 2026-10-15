@@ -257,21 +257,21 @@ function Voting() {
                 fontSize: '0.7rem',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                background: 'rgba(99,102,241,0.15)',
-                color: '#818cf8',
+                background: 'var(--accent-surface)',
+                color: 'var(--accent-primary)',
                 marginBottom: '0.5rem'
               }}>{session.status || 'Session'}</span>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0.25rem 0' }}>
                 {session.title || routeSessionId}
               </h2>
               {joined && currentDisplayName && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   <User size={14} />
-                  <span>Voting as: <strong style={{ color: '#f8fafc' }}>{currentDisplayName}</strong></span>
+                  <span>Voting as: <strong style={{ color: 'var(--text-primary)' }}>{currentDisplayName}</strong></span>
                 </div>
               )}
               {typeof session.connectedCount === 'number' && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', marginLeft: (joined && currentDisplayName) ? '0.75rem' : 0, fontSize: '0.8rem', color: '#38bdf8' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', marginLeft: (joined && currentDisplayName) ? '0.75rem' : 0, fontSize: '0.8rem', color: 'var(--accent-primary)' }}>
                   <Radio size={14} />
                   <span><strong>{session.connectedCount}</strong> {session.connectedCount === 1 ? 'voter' : 'voters'} active</span>
                 </div>
@@ -339,9 +339,9 @@ function Voting() {
                   style={{
                     padding: '0.6rem 0.8rem',
                     borderRadius: '6px',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    color: '#fca5a5',
+                    background: 'var(--status-danger-bg)',
+                    border: '1px solid var(--status-danger-bg)',
+                    color: 'var(--status-danger)',
                     fontSize: '0.85rem',
                     marginBottom: '1rem'
                   }}
@@ -352,7 +352,7 @@ function Voting() {
 
               <form onSubmit={handleJoinSession} style={{ width: '100%' }}>
                 <div style={{ marginBottom: '1rem', textAlign: 'left' }}>
-                  <label htmlFor="display-name" style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  <label htmlFor="display-name" style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                     Display Name
                   </label>
                   <input
@@ -366,10 +366,10 @@ function Voting() {
                     style={{
                       width: '100%',
                       padding: '0.75rem 1rem',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-strong)',
                       borderRadius: '8px',
-                      color: '#ffffff',
+                      color: 'var(--text-primary)',
                       fontSize: '0.95rem'
                     }}
                   />
@@ -388,11 +388,11 @@ function Voting() {
 
           {/* State 4: Loaded and Joined — Tie Pending Resolution Banner (AC-6) */}
           {hasLoaded && !winner && joined && isTiePendingState && (
-            <section className="voting-status-card" aria-live="polite" style={{ borderColor: 'rgba(245, 158, 11, 0.35)' }} data-testid="tie-pending-card">
-              <div className="empty-icon-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }} aria-hidden="true">
+            <section className="voting-status-card" aria-live="polite" style={{ borderColor: 'var(--status-warning)' }} data-testid="tie-pending-card">
+              <div className="empty-icon-badge" style={{ background: 'var(--status-warning-bg)', color: 'var(--status-warning)' }} aria-hidden="true">
                 <Clock size={44} />
               </div>
-              <span className="pairwise-badge" style={{ marginBottom: '0.75rem', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+              <span className="pairwise-badge" style={{ marginBottom: '0.75rem', background: 'var(--status-warning-bg)', color: 'var(--status-warning)', borderColor: 'var(--status-warning)' }}>
                 TIE PENDING RESOLUTION
               </span>
               <h1 className="voting-status-title">Tie in Progress</h1>
@@ -410,10 +410,10 @@ function Voting() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: '#4ade80', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: 'var(--status-success)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   View Results →
                 </Link>
-                <Link to="/sessions" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to="/sessions" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   All Sessions
                 </Link>
               </div>
@@ -426,7 +426,7 @@ function Voting() {
               <div className="empty-icon-badge" aria-hidden="true">
                 <Clock size={44} />
               </div>
-              <span className="pairwise-badge" style={{ marginBottom: '0.75rem', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171' }}>
+              <span className="pairwise-badge" style={{ marginBottom: '0.75rem', background: 'var(--status-danger-bg)', color: 'var(--status-danger)' }}>
                 ROUND CLOSED
               </span>
               <h1 className="voting-status-title">Round Closed</h1>
@@ -434,10 +434,10 @@ function Voting() {
                 Voting has ended for this round. Preparing authoritative results...
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: '#4ade80', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: 'var(--status-success)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   View Results →
                 </Link>
-                <Link to="/sessions" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to="/sessions" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   All Sessions
                 </Link>
               </div>
@@ -448,7 +448,7 @@ function Voting() {
           {hasLoaded && !winner && joined && roundLifecycle === 'RESULTS_REVEALED' && !isTiePendingState && (
             <section className="pairwise-arena">
               <header className="pairwise-header">
-                <span className="pairwise-badge" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#facc15' }}>
+                <span className="pairwise-badge" style={{ background: 'var(--status-warning-bg)', color: 'var(--status-warning)' }}>
                   ROUND RESULTS REVEALED
                 </span>
                 <h1 className="pairwise-title">Round Concluded</h1>
@@ -512,10 +512,10 @@ function Voting() {
 
               {/* Navigation */}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: '#4ade80', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: 'var(--status-success)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   Detailed Results Chart →
                 </Link>
-                <Link to="/sessions" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to="/sessions" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   All Sessions
                 </Link>
               </div>
@@ -533,7 +533,7 @@ function Voting() {
                 The voting session is currently waiting for the administrator to start the round.
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1rem' }}>
-                <Link to="/sessions" style={{ color: '#818cf8', textDecoration: 'none', fontSize: '0.9rem' }}>
+                <Link to="/sessions" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '0.9rem' }}>
                   ← Back to Sessions
                 </Link>
               </div>
@@ -562,9 +562,9 @@ function Voting() {
                   margin: '0 auto 1.5rem',
                   padding: '0.75rem 1rem',
                   borderRadius: '8px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: '#fca5a5',
+                  background: 'var(--status-danger-bg)',
+                  border: '1px solid var(--status-danger-bg)',
+                  color: 'var(--status-danger)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
@@ -637,10 +637,10 @@ function Voting() {
 
               {/* Navigation */}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: '#4ade80', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to={`/sessions/${routeSessionId}/results`} style={{ color: 'var(--status-success)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   View Results →
                 </Link>
-                <Link to="/sessions" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>
+                <Link to="/sessions" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>
                   All Sessions
                 </Link>
               </div>

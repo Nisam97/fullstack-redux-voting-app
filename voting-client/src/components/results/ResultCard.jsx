@@ -17,7 +17,7 @@ function ResultCard({
   position = 1,
   totalVotes = 0,
   isWinner = false,
-  winnerLabel = "🏆 Winner",
+  winnerLabel = "Winner",
   hideStats = false,
 }) {
   const initials = candidate

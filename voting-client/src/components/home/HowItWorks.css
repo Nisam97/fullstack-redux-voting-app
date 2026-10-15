@@ -1,85 +1,116 @@
-.how-section{
-    padding:100px 8%;
-    background:#07111f;
-    color:white;
+/* =========================================================
+   How It Works — Aura Design System
+   ========================================================= */
+
+.how-section {
+  padding: 100px 8%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease;
 }
 
-.section-heading{
-    text-align:center;
-    margin-bottom:70px;
+.section-heading {
+  text-align: center;
+  margin-bottom: 70px;
 }
 
-.section-heading span{
-    color:#4aa8ff;
-    font-weight:600;
-    letter-spacing:2px;
+.section-heading span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
-.section-heading h2{
-    /* Same dark-background rule as .section-title in Features.css. */
-    color:#f1f5f9;
-    font-size:52px;
-    margin:20px 0;
-    font-weight:700;
+.section-heading h2 {
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(2.2rem, 4.5vw, 3.4rem);
+  line-height: 1.1;
+  margin: 20px 0;
 }
 
-.section-heading p{
-    color:#a7b2c7;
-    max-width:650px;
-    margin:auto;
-    font-size:18px;
+.section-heading p {
+  color: var(--text-secondary);
+  max-width: 650px;
+  margin: auto;
+  font-size: 1.05rem;
+  line-height: 1.75;
 }
 
-.steps{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:30px;
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 30px;
 }
 
-.step-card{
-    position:relative;
-    background:#101c33;
-    border-radius:22px;
-    padding:35px;
-    text-align:center;
-    transition:.35s;
-    border:1px solid rgba(255,255,255,.08);
+.step-card {
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 22px;
+  padding: 35px;
+  text-align: center;
+  transition: transform 0.35s ease, border-color 0.35s ease,
+    box-shadow 0.35s ease;
+  border: 1px solid var(--border-subtle);
 }
 
-.step-card:hover{
-    transform:translateY(-12px);
-    box-shadow:0 20px 50px rgba(0,0,0,.35);
+.step-card:hover {
+  transform: translateY(-10px);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-.step-number{
-    position:absolute;
-    top:18px;
-    right:20px;
-    color:#3d6cff;
-    font-size:20px;
-    font-weight:bold;
+.step-number {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
 }
 
-.step-icon{
-    width:80px;
-    height:80px;
-    margin:auto;
-    border-radius:50%;
-    background:linear-gradient(135deg,#2563eb,#00d4ff);
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:34px;
-    margin-bottom:25px;
+.step-icon {
+  width: 78px;
+  height: 78px;
+  margin: auto auto 25px;
+  border-radius: 50%;
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-light);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 30px;
 }
 
-.step-card h3{
-    /* Dark card backgrounds in every scheme — keep headings light. */
-    color:#f1f5f9;
-    margin-bottom:15px;
+.step-card h3 {
+  color: var(--text-primary);
+  margin-bottom: 15px;
+  font-size: 1.15rem;
 }
 
-.step-card p{
-    color:#c7d3e2;
-    line-height:1.7;
+.step-card p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 1000px) {
+  .steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .how-section {
+    padding: 80px 20px;
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,9 +1,14 @@
+/* =========================================================
+   Voting Arena — Aura Design System
+   ========================================================= */
+
 .voting-page {
   min-height: 100vh;
-  background: var(--background, #0f172a);
-  color: var(--text, #f8fafc);
+  background: var(--bg-base);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
+  transition: background-color 0.3s ease;
 }
 
 .voting-main {
@@ -25,16 +30,16 @@
   margin: 0 auto;
 }
 
-/* Status Cards (Loading, Winner, Empty) */
+/* Status cards (loading, winner, empty) */
 .voting-status-card {
-  background: var(--surface, #1e293b);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   padding: 60px 40px;
   text-align: center;
   max-width: 580px;
   margin: 0 auto;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-soft);
 }
 
 .voting-spinner-wrapper {
@@ -43,7 +48,7 @@
 }
 
 .voting-spinner {
-  color: var(--accent, #38bdf8);
+  color: var(--accent-primary);
   animation: spin 1.5s linear infinite;
 }
 
@@ -57,78 +62,85 @@
 }
 
 .voting-status-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text, #f8fafc);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.4rem;
+  color: var(--text-primary);
   margin: 0 0 16px 0;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
 .voting-status-desc {
-  color: var(--muted, #94a3b8);
-  font-size: 16px;
+  color: var(--text-secondary);
+  font-size: 1rem;
   line-height: 1.6;
   max-width: 440px;
   margin: 0 auto;
 }
 
-/* Winner Card */
+/* Winner card */
 .voting-winner-card {
-  border-color: rgba(234, 179, 8, 0.3);
-  background: radial-gradient(circle at center, rgba(234, 179, 8, 0.1) 0%, #1e293b 70%);
+  border-color: var(--border-accent);
+  background:
+    radial-gradient(circle at center, var(--accent-surface) 0%, transparent 70%),
+    var(--bg-surface);
 }
 
 .winner-icon-badge {
   width: 90px;
   height: 90px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #eab308, #ca8a04);
-  color: #1a1a1a;
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-light);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
-  box-shadow: 0 10px 30px rgba(234, 179, 8, 0.4);
+  box-shadow: var(--shadow-soft);
 }
 
 .winner-eyebrow {
   display: inline-block;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #facc15;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
   margin-bottom: 12px;
 }
 
 .winner-name-display {
   margin: 20px 0 24px 0;
   padding: 16px 32px;
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.35);
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
   border-radius: 16px;
   display: inline-block;
 }
 
 .winner-name-display h2 {
-  font-size: 34px;
-  color: #fef08a;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.4rem;
+  line-height: 1.1;
+  color: var(--accent-light);
   margin: 0;
-  font-weight: 800;
 }
 
 .empty-icon-badge {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--muted, #94a3b8);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
 }
 
-/* Pairwise Arena */
+/* Pairwise arena */
 .pairwise-arena {
   display: flex;
   flex-direction: column;
@@ -142,33 +154,36 @@
 
 .pairwise-badge {
   display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--accent, #38bdf8);
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  background: var(--accent-surface);
+  border: 1px solid var(--border-accent);
   padding: 6px 16px;
-  border-radius: 20px;
+  border-radius: 9999px;
   margin-bottom: 16px;
 }
 
 .pairwise-title {
-  font-size: 42px;
-  font-weight: 700;
-  color: var(--text, #f8fafc);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2.8rem;
+  color: var(--text-primary);
   margin: 0 0 12px 0;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .pairwise-subtitle {
-  color: var(--muted, #94a3b8);
-  font-size: 16px;
+  color: var(--text-secondary);
+  font-size: 1rem;
   max-width: 520px;
   margin: 0 auto;
 }
 
-/* Matchup Cards & VS */
+/* Matchup cards & VS */
 .matchup-arena {
   display: flex;
   align-items: center;
@@ -189,16 +204,17 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  border: 2px solid rgba(56, 189, 248, 0.4);
-  color: var(--accent, #38bdf8);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-soft);
 }
 
 /* Feedback banner */
@@ -214,38 +230,50 @@
   align-items: center;
   gap: 10px;
   padding: 12px 24px;
-  border-radius: 30px;
-  font-size: 15px;
+  border-radius: 9999px;
+  font-size: 0.95rem;
   font-weight: 500;
   text-align: center;
   transition: all 0.3s ease;
+  border: 1px solid transparent;
 }
 
 .feedback-voted {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #34d399;
+  background: var(--status-success-bg);
+  border-color: color-mix(in srgb, var(--status-success) 35%, transparent);
+  color: var(--status-success);
 }
 
 .feedback-icon {
-  color: #34d399;
+  color: var(--status-success);
   flex-shrink: 0;
 }
 
 .feedback-prompt {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--muted, #94a3b8);
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 .feedback-expired {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
+  background: var(--status-danger-bg);
+  border-color: color-mix(in srgb, var(--status-danger) 35%, transparent);
+  color: var(--status-danger);
 }
 
 .feedback-expired .feedback-icon {
-  color: #f87171;
+  color: var(--status-danger);
+  flex-shrink: 0;
+}
+
+.feedback-tie-pending {
+  background: var(--status-warning-bg);
+  border-color: color-mix(in srgb, var(--status-warning) 35%, transparent);
+  color: var(--status-warning);
+}
+
+.feedback-tie-pending .feedback-icon {
+  color: var(--status-warning);
   flex-shrink: 0;
 }
 
@@ -265,17 +293,6 @@
   max-width: 320px;
 }
 
-.feedback-tie-pending {
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fbbf24;
-}
-
-.feedback-tie-pending .feedback-icon {
-  color: #fbbf24;
-  flex-shrink: 0;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .matchup-arena {
@@ -289,13 +306,13 @@
   }
 
   .pairwise-title {
-    font-size: 32px;
+    font-size: 2rem;
   }
 
   .vs-circle {
     width: 48px;
     height: 48px;
-    font-size: 14px;
+    font-size: 1rem;
   }
 
   .voting-status-card {

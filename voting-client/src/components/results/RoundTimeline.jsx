@@ -136,7 +136,7 @@ function RoundTimeline({ rounds = [], winner = null }) {
                               className="round-candidate-bar-fill"
                               style={{
                                 width: `${cand.percentage}%`,
-                                backgroundColor: cand.fill || (idx === 0 ? '#6366f1' : '#ec4899')
+                                backgroundColor: cand.fill || (idx === 0 ? 'var(--accent-primary)' : 'var(--accent-light)')
                               }}
                             />
                           </div>
@@ -149,8 +149,8 @@ function RoundTimeline({ rounds = [], winner = null }) {
                     <div className="round-championship-notice">
                       <Award size={16} aria-hidden="true" />
                       <span>{winner
-                        ? 'Championship Round — Winner crowned tournament champion'
-                        : 'Final Round — No winner declared'}</span>
+                        ? 'Championship Round: Winner crowned tournament champion'
+                        : 'Final Round: No winner declared'}</span>
                     </div>
                   )}
                 </div>

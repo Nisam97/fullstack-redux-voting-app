@@ -137,53 +137,26 @@ function Register() {
   };
 
   return (
-    <div className="register-page" style={{ flexDirection: "column", minHeight: "100vh", padding: 0 }}>
+    <div className="register-page register-page--stacked">
       <Navbar />
 
-      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+      <main className="register-main">
         <div className="register-card">
           <div className="register-header">
-            <h1 style={{ fontSize: "1.8rem" }}>Create Voter Account</h1>
+            <h1>Create Voter Account</h1>
             <p>Passwordless voting identity with email verification</p>
           </div>
 
           {error && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "8px",
-                background: "rgba(239, 68, 68, 0.15)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                color: "#fca5a5",
-                fontSize: "0.85rem",
-                marginBottom: "1.25rem"
-              }}
-              role="alert"
-            >
-              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <div className="auth-alert auth-alert-error" role="alert">
+              <AlertCircle size={18} className="auth-alert-icon" aria-hidden="true" />
               <span>{error}</span>
             </div>
           )}
 
           {infoMessage && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "8px",
-                background: "rgba(16, 185, 129, 0.15)",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
-                color: "#6ee7b7",
-                fontSize: "0.85rem",
-                marginBottom: "1.25rem"
-              }}
-            >
-              <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+            <div className="auth-alert auth-alert-success">
+              <CheckCircle2 size={18} className="auth-alert-icon" aria-hidden="true" />
               <span>{infoMessage}</span>
             </div>
           )}
@@ -191,8 +164,8 @@ function Register() {
           {step === 1 ? (
             <form onSubmit={handleRequestOtp}>
               <div className="input-group">
-                <label htmlFor="reg-email" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <Mail size={16} /> Email Address
+                <label htmlFor="reg-email" className="input-label-with-icon">
+                  <Mail size={16} aria-hidden="true" /> Email Address
                 </label>
                 <input
                   id="reg-email"
@@ -207,8 +180,8 @@ function Register() {
               </div>
 
               <div className="input-group">
-                <label htmlFor="reg-name" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <User size={16} /> Display Name
+                <label htmlFor="reg-name" className="input-label-with-icon">
+                  <User size={16} aria-hidden="true" /> Display Name
                 </label>
                 <input
                   id="reg-name"
@@ -223,8 +196,8 @@ function Register() {
               </div>
 
               <div className="input-group">
-                <label htmlFor="reg-username" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <AtSign size={16} /> Username
+                <label htmlFor="reg-username" className="input-label-with-icon">
+                  <AtSign size={16} aria-hidden="true" /> Username
                 </label>
                 <input
                   id="reg-username"
@@ -237,7 +210,7 @@ function Register() {
                   maxLength={20}
                   required
                 />
-                <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>
+                <span className="field-hint">
                   3-20 characters: letters, numbers, underscores
                 </span>
               </div>
@@ -246,34 +219,33 @@ function Register() {
                 type="submit"
                 className="register-btn"
                 disabled={loading || cooldownSeconds > 0}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
               >
                 {loading ? "Sending Code..." : cooldownSeconds > 0 ? `Please wait (${cooldownSeconds}s)` : (
                   <>
-                    Send Verification Code <ArrowRight size={18} />
+                    Send Verification Code <ArrowRight size={18} aria-hidden="true" />
                   </>
                 )}
               </button>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp}>
-              <div style={{ textAlign: "center", marginBottom: "1.5rem", color: "#cbd5e1", fontSize: "0.9rem" }}>
-                Enter the 6-digit code sent to <strong style={{ color: "#38bdf8" }}>{email}</strong>
+              <div className="otp-hint">
+                Enter the 6-digit code sent to <strong className="otp-email">{email}</strong>
               </div>
 
               <div className="input-group">
-                <label htmlFor="reg-code" style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <KeyRound size={16} /> 6-Digit Code
+                <label htmlFor="reg-code" className="input-label-with-icon">
+                  <KeyRound size={16} aria-hidden="true" /> 6-Digit Code
                 </label>
                 <input
                   id="reg-code"
                   type="text"
+                  className="otp-code-input"
                   placeholder="123456"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                   disabled={loading}
                   maxLength={6}
-                  style={{ textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: "bold" }}
                   required
                   autoFocus
                 />
@@ -283,35 +255,25 @@ function Register() {
                 type="submit"
                 className="register-btn"
                 disabled={loading || code.trim().length !== 6}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
               >
                 {loading ? "Verifying..." : "Verify & Create Account"}
               </button>
 
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+              <div className="register-actions-row">
                 <button
                   type="button"
+                  className="link-btn"
                   onClick={() => { setStep(1); setError(null); setInfoMessage(null); }}
-                  style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.85rem" }}
                 >
                   Change details
                 </button>
                 <button
                   type="button"
+                  className="link-btn link-btn-accent"
                   onClick={handleResend}
                   disabled={loading || cooldownSeconds > 0}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: cooldownSeconds > 0 ? "#64748b" : "#38bdf8",
-                    cursor: cooldownSeconds > 0 ? "default" : "pointer",
-                    fontSize: "0.85rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.25rem"
-                  }}
                 >
-                  <RotateCw size={14} /> {cooldownSeconds > 0 ? `Resend code (${cooldownSeconds}s)` : "Resend code"}
+                  <RotateCw size={14} aria-hidden="true" /> {cooldownSeconds > 0 ? `Resend code (${cooldownSeconds}s)` : "Resend code"}
                 </button>
               </div>
             </form>

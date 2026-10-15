@@ -1,11 +1,19 @@
+/* =========================================================
+   Hero — Aura Design System (Warm Editorial Precision)
+   ========================================================= */
+
 .hero-section {
   min-height: 100vh;
-  padding: 100px 7%;
-  background: #08111f;
-  color: white;
+  padding: 150px 7% 100px;
+  background:
+    radial-gradient(circle at 78% 18%, var(--glow-color) 0%, transparent 42%),
+    var(--bg-base);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
 }
 
 .hero-container {
@@ -13,78 +21,106 @@
   max-width: 1200px;
   margin: auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.05fr 0.95fr;
   gap: 70px;
   align-items: center;
 }
 
 .hero-content {
-  max-width: 650px;
+  max-width: 640px;
 }
 
 .hero-badge {
-  display: inline-block;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1rem;
   padding: 10px 18px;
-  margin-bottom: 25px;
-  border: 1px solid #2563eb;
-  border-radius: 30px;
-  color: #60a5fa;
-  background: rgba(37, 99, 235, 0.1);
-  font-size: 14px;
+  margin-bottom: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* Each attribute stays on one line; the badge wraps between attributes. */
+.hero-badge span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
 }
 
 .hero-content h1 {
   margin: 0;
-  font-size: 70px;
+  font-family: var(--font-serif);
+  font-size: clamp(3rem, 6vw, 4.4rem);
   line-height: 1.05;
-  font-weight: 800;
-  letter-spacing: -2px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .hero-content h1 span {
-  color: #38bdf8;
+  font-style: italic;
+  color: var(--accent-light);
 }
 
 .hero-content p {
   margin: 28px 0;
-  color: #a9b7ca;
-  font-size: 18px;
+  color: var(--text-secondary);
+  font-size: 1.15rem;
   line-height: 1.8;
+  max-width: 560px;
 }
 
 .hero-buttons {
   display: flex;
   gap: 15px;
   margin-top: 30px;
+  flex-wrap: wrap;
 }
 
 .hero-primary-btn,
 .hero-secondary-btn {
-  padding: 15px 25px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 15px 30px;
+  border-radius: 9999px;
   text-decoration: none;
-  font-weight: 700;
-  transition: 0.3s;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: transform 0.25s ease, background-color 0.25s ease,
+    border-color 0.25s ease, color 0.25s ease;
 }
 
 .hero-primary-btn {
-  background: #2563eb;
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: 1px solid transparent;
 }
 
 .hero-primary-btn:hover {
-  background: #1d4ed8;
-  transform: translateY(-3px);
+  background: var(--btn-primary-hover);
+  transform: translateY(-2px);
 }
 
 .hero-secondary-btn {
-  border: 1px solid #38bdf8;
-  color: #38bdf8;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  background: transparent;
 }
 
 .hero-secondary-btn:hover {
-  background: rgba(56, 189, 248, 0.1);
-  transform: translateY(-3px);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-accent);
+  color: var(--accent-primary);
+  transform: translateY(-2px);
 }
 
 .hero-visual {
@@ -92,14 +128,29 @@
   justify-content: center;
 }
 
+/* Live election preview card */
 .hero-card {
   width: 100%;
   max-width: 450px;
   padding: 30px;
-  border-radius: 25px;
-  background: #111d32;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4);
+  border-radius: 22px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: "";
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  height: 60%;
+  background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .hero-card-header {
@@ -107,34 +158,35 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 30px;
+  position: relative;
 }
 
 .dashboard-label {
-  color: #38bdf8;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
 }
 
 .hero-card h3 {
   margin: 8px 0 0;
-  font-size: 20px;
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
-.live-status {
-  display: flex;
+/* Neutral label marking the card as illustrative, not a live tally */
+.hero-preview-tag {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #4ade80;
-  font-size: 12px;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.68rem;
   font-weight: 700;
-}
-
-.live-status span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4ade80;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .candidate {
@@ -142,6 +194,7 @@
   justify-content: space-between;
   align-items: center;
   margin-top: 22px;
+  position: relative;
 }
 
 .candidate-info {
@@ -157,40 +210,45 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2563eb;
-  font-weight: 800;
+  background: var(--accent-surface);
+  color: var(--accent-light);
+  font-weight: 700;
 }
 
 .avatar.second {
-  background: #0891b2;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 .candidate-info strong {
   display: block;
+  color: var(--text-primary);
+  font-size: 0.95rem;
 }
 
 .candidate-info small {
   display: block;
   margin-top: 4px;
-  color: #7f91aa;
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 .progress-track {
   height: 8px;
   margin-top: 12px;
   border-radius: 20px;
-  background: #243149;
+  background: var(--bg-elevated);
   overflow: hidden;
 }
 
 .progress-value {
   height: 100%;
   border-radius: 20px;
-  background: #2563eb;
+  background: var(--accent-primary);
 }
 
 .second-progress {
-  background: #06b6d4;
+  background: var(--accent-light);
 }
 
 .hero-card-footer {
@@ -198,23 +256,25 @@
   justify-content: space-between;
   margin-top: 30px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .hero-card-footer small {
   display: block;
-  color: #7f91aa;
+  color: var(--text-muted);
   margin-bottom: 5px;
+  font-size: 0.75rem;
 }
 
 .hero-card-footer strong {
-  font-size: 20px;
+  font-size: 1.4rem;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  color: var(--text-primary);
 }
 
 /* Tablet */
-
 @media (max-width: 900px) {
-
   .hero-container {
     grid-template-columns: 1fr;
     text-align: center;
@@ -231,26 +291,16 @@
   .hero-visual {
     margin-top: 30px;
   }
-
-  .hero-content h1 {
-    font-size: 55px;
-  }
 }
 
 /* Mobile */
-
 @media (max-width: 600px) {
-
   .hero-section {
-    padding: 70px 20px;
-  }
-
-  .hero-content h1 {
-    font-size: 43px;
+    padding: 120px 20px 70px;
   }
 
   .hero-content p {
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .hero-buttons {
@@ -260,7 +310,7 @@
   .hero-primary-btn,
   .hero-secondary-btn {
     width: 100%;
-    box-sizing: border-box;
+    justify-content: center;
   }
 
   .hero-card {

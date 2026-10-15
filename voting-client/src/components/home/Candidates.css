@@ -1,68 +1,70 @@
-.candidates{
-    padding:100px 0;
-    background:#0f172a;
+/* =========================================================
+   Voting Modes — Aura Design System
+   ========================================================= */
+
+.candidates {
+  padding: 100px 0;
+  background: var(--bg-surface);
+  transition: background-color 0.3s ease;
 }
 
-.candidate-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-    gap:35px;
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 35px;
 }
 
-.candidate-card{
-    background:#1e293b;
-    border-radius:20px;
-    overflow:hidden;
-    text-align:center;
-    transition:.4s;
-    border:1px solid rgba(255,255,255,.08);
+.candidate-card {
+  background: var(--bg-base);
+  border-radius: 20px;
+  overflow: hidden;
+  text-align: center;
+  transition: transform 0.35s ease, border-color 0.35s ease,
+    box-shadow 0.35s ease;
+  border: 1px solid var(--border-subtle);
 }
 
-.candidate-card:hover{
-    transform:translateY(-12px);
-    box-shadow:0 20px 45px rgba(37,99,235,.25);
+.candidate-card:hover {
+  transform: translateY(-10px);
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-hover);
 }
 
-.candidate-card img{
-    width:100%;
-    height:320px;
-    object-fit:cover;
+/* Icon panel replacing the old placeholder <img> */
+.mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--accent-light);
+  background: var(--accent-surface);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-/* Emoji badge replacing the old placeholder <img> */
-.mode-icon{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    height:120px;
-    font-size:64px;
-    background:linear-gradient(135deg,rgba(37,99,235,.25),rgba(56,189,248,.15));
+.candidate-card h3 {
+  color: var(--text-primary);
+  margin-top: 20px;
+  font-size: 1.4rem;
 }
 
-.candidate-card h3{
-    /* Dark card backgrounds in every scheme — keep headings light. */
-    color:#f1f5f9;
-    margin-top:20px;
-    font-size:24px;
+.candidate-card span {
+  color: var(--accent-primary);
+  display: block;
+  margin: 10px 0 25px;
+  font-size: 0.9rem;
 }
 
-.candidate-card span{
-    color:#38bdf8;
-    display:block;
-    margin:10px 0 25px;
+.candidate-card button {
+  margin-bottom: 30px;
+  padding: 14px 35px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  cursor: pointer;
+  transition: background-color 0.25s ease;
 }
 
-.candidate-card button{
-    margin-bottom:30px;
-    padding:14px 35px;
-    border:none;
-    border-radius:40px;
-    background:#2563eb;
-    color:white;
-    cursor:pointer;
-    transition:.3s;
-}
-
-.candidate-card button:hover{
-    background:#1d4ed8;
+.candidate-card button:hover {
+  background: var(--btn-primary-hover);
 }

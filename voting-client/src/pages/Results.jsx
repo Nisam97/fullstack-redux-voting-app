@@ -296,8 +296,8 @@ const handleTogglePublish = () => {
                 fontSize: '0.7rem',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                background: 'rgba(99,102,241,0.15)',
-                color: '#818cf8',
+                background: 'var(--accent-surface)',
+                color: 'var(--accent-primary)',
                 marginBottom: '0.5rem'
               }}>{isConcluded ? 'Completed' : (session?.status || 'Session')}</span>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0.25rem 0' }}>
@@ -449,7 +449,7 @@ const handleTogglePublish = () => {
                 All pairwise rounds have concluded. <strong>{effectiveWinner}</strong> has won the tournament by authoritative server decision!
               </p>
               {historicalResult?.completedAt && (
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0.25rem 0 1rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.25rem 0 1rem' }}>
                   Concluded: {new Date(historicalResult.completedAt).toLocaleString()}
                 </p>
               )}
@@ -463,7 +463,7 @@ const handleTogglePublish = () => {
                   position={1}
                   totalVotes="Final"
                   isWinner={true}
-                  winnerLabel="🏆 Official Winner"
+                  winnerLabel="Official Winner"
                 />
               </div>
 
@@ -566,7 +566,7 @@ const handleTogglePublish = () => {
               <footer className="results-footer-bar">
                 <div className="results-totals">
                   <span className="results-totals-label">Round Status:</span>
-                  <span className="results-totals-value" style={{ fontSize: '1rem', color: '#38bdf8' }}>
+                  <span className="results-totals-value" style={{ fontSize: '1rem', color: 'var(--accent-primary)' }}>
                     Voting Active
                   </span>
                 </div>

@@ -1,24 +1,25 @@
+import { Lock, Scale, ScrollText } from "lucide-react";
 import "./Testimonials.css";
 
 // Product-strength cards, not invented testimonials: fictional users with
 // invented quotes would not survive a question about who they are.
 const strengths = [
   {
-    icon: "🔐",
+    icon: Lock,
     title: "Passwordless by design",
     detail:
-      "Voters sign in with a one-time code sent to their email — no passwords stored, nothing to leak.",
+      "Voters sign in with a one-time code sent to their email. No passwords are stored, so there is nothing to leak.",
     tag: "Voter access"
   },
   {
-    icon: "⚖️",
+    icon: Scale,
     title: "The server decides",
     detail:
       "Tallies, timers and round advancement run only on the backend. Clients render state and send intent.",
     tag: "Integrity"
   },
   {
-    icon: "🧾",
+    icon: ScrollText,
     title: "Audit-ready history",
     detail:
       "Every completed session is persisted with its full round-by-round history and final result.",
@@ -38,10 +39,12 @@ function Testimonials() {
 
         <div className="testimonial-grid">
 
-          {strengths.map((item, index) => (
-            <div className="testimonial-card" key={index}>
+          {strengths.map((item) => (
+            <div className="testimonial-card" key={item.title}>
 
-              <div className="quote">{item.icon}</div>
+              <div className="quote">
+                <item.icon size={26} aria-hidden="true" />
+              </div>
 
               <p>{item.detail}</p>
 

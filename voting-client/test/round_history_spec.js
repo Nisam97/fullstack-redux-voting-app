@@ -23,8 +23,8 @@ describe('Round History and Full Results Client Specs', () => {
     it('formatResolution returns descriptive badges for round resolutions', () => {
       assert.strictEqual(formatResolution('WINNER', ['Trainspotting']), 'Winner: Trainspotting');
       assert.strictEqual(formatResolution('WINNER'), 'Winner declared');
-      assert.strictEqual(formatResolution('TIE_REQUEUED'), 'Tie — Re-queued');
-      assert.strictEqual(formatResolution('TIE_COIN_TOSS'), 'Tie — Decided by coin toss');
+      assert.strictEqual(formatResolution('TIE_REQUEUED'), 'Tie: Re-queued');
+      assert.strictEqual(formatResolution('TIE_COIN_TOSS'), 'Tie: Decided by coin toss');
       assert.strictEqual(formatResolution('UNKNOWN'), 'Round complete');
     });
 

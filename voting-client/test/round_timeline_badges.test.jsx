@@ -168,17 +168,17 @@ describe('RoundTimeline legacy resolution aliases (AC-6)', () => {
   it('pins the legacy requeue wording', () => {
     const { container } = render(<RoundTimeline rounds={[round(1, 'TIE_REQUEUED')]} />)
 
-    expect(badgeFor(container, 1).textContent).toBe('Tie — Re-queued')
+    expect(badgeFor(container, 1).textContent).toBe('Tie: Re-queued')
   })
 
   it('pins the legacy coin toss wording', () => {
     const { container } = render(<RoundTimeline rounds={[round(1, 'TIE_COIN_TOSS')]} />)
 
-    expect(badgeFor(container, 1).textContent).toBe('Tie — Decided by coin toss')
+    expect(badgeFor(container, 1).textContent).toBe('Tie: Decided by coin toss')
   })
 
   it('keeps the legacy aliases distinct from the current enum wording', () => {
-    // "Tie — Re-queued" and "Tie, Both Advanced" are easy to confuse and were
+    // "Tie: Re-queued" and "Tie, Both Advanced" are easy to confuse and were
     // once the same label for two different settlements.
     const { container } = render(
       <RoundTimeline
@@ -192,9 +192,9 @@ describe('RoundTimeline legacy resolution aliases (AC-6)', () => {
 
     const badges = badgeTexts(container)
     expect(badges).toEqual([
-      'Tie — Re-queued',
+      'Tie: Re-queued',
       'Tie, Both Advanced',
-      'Tie — Decided by coin toss'
+      'Tie: Decided by coin toss'
     ])
     expect(new Set(badges).size).toBe(3)
   })

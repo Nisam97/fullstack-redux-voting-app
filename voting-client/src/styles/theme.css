@@ -1,0 +1,493 @@
+/* =========================================================
+   VOTESPHERE — AURA DESIGN SYSTEM
+   Global theme foundation: tokens, typography, base, shared UI
+   ========================================================= */
+
+/* =========================================================
+   1. DESIGN TOKENS — DARK THEME (default)
+   Warm charcoal / espresso foundations
+   ========================================================= */
+
+:root {
+  /* Surfaces */
+  --bg-base: #0d0b0a;
+  --bg-surface: #161311;
+  --bg-surface-hover: #1f1a17;
+  --bg-elevated: #26201c;
+  --bg-input: #1b1714;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(224, 147, 110, 0.35);
+
+  /* Typography */
+  --text-primary: #faf6f0;
+  --text-secondary: #baafa6;
+  --text-muted: #7a7067;
+  --text-inverse: #120e0c;
+
+  /* Accent */
+  --accent-primary: #e0936e;
+  --accent-light: #e5a886;
+  --accent-surface: rgba(224, 147, 110, 0.12);
+
+  /* Status */
+  --status-online: #e58c5a;
+  --status-online-bg: rgba(229, 140, 90, 0.15);
+  --status-success: #52b788;
+  --status-success-bg: rgba(82, 183, 136, 0.14);
+  --status-warning: #e0a96e;
+  --status-warning-bg: rgba(224, 169, 110, 0.14);
+  --status-danger: #d96b6b;
+  --status-danger-bg: rgba(217, 107, 107, 0.14);
+  --status-info: #e5a886;
+  --status-info-bg: rgba(224, 147, 110, 0.12);
+
+  /* Buttons */
+  --btn-primary-bg: #faf6f0;
+  --btn-primary-text: #120e0c;
+  --btn-primary-hover: #ebe4da;
+  --btn-accent-bg: #e0936e;
+  --btn-accent-text: #120e0c;
+  --btn-accent-hover: #d4845e;
+
+  /* Ambient glow */
+  --glow-color: rgba(224, 147, 110, 0.08);
+
+  /* Shape */
+  --radius-pill: 9999px;
+  --radius-card: 16px;
+  --radius-input: 10px;
+
+  /* Elevation */
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.28);
+  --shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.38);
+
+  /* Fonts */
+  --font-serif: "Instrument Serif", "Playfair Display", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+
+  /* Legacy aliases kept so existing var(--x, fallback) reads resolve warm */
+  --background: var(--bg-base);
+  --surface: var(--bg-surface);
+  --text: var(--text-primary);
+  --muted: var(--text-muted);
+  --accent: var(--accent-primary);
+  --border: var(--border-subtle);
+  --primary: var(--accent-primary);
+  --secondary: var(--accent-light);
+  --danger: var(--status-danger);
+
+  color-scheme: dark;
+}
+
+/* =========================================================
+   2. DESIGN TOKENS — LIGHT THEME (warm ivory / cream)
+   ========================================================= */
+
+[data-theme="light"],
+.light-theme {
+  --bg-base: #f7f4ef;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f2ede4;
+  --bg-elevated: #efe8dd;
+  --bg-input: #efe8dd;
+
+  --border-subtle: rgba(26, 20, 18, 0.08);
+  --border-strong: rgba(26, 20, 18, 0.18);
+  --border-accent: rgba(197, 107, 68, 0.4);
+
+  --text-primary: #1f1915;
+  --text-secondary: #594f47;
+  --text-muted: #8c8075;
+  --text-inverse: #faf6f0;
+
+  /* Light accent/status colours are used as text (buttons, badges, chips,
+     eyebrows), so each must clear 4.5:1 on --bg-surface, --bg-base, the
+     tinted background and --bg-elevated. The previous warm values sat at
+     2.7–3.8:1 and only worked as fills, not as text. */
+  --accent-primary: #a8501f;
+  --accent-light: #9c4a22;
+  --accent-surface: rgba(197, 107, 68, 0.08);
+
+  --status-online: #a8501f;
+  --status-online-bg: rgba(217, 112, 54, 0.12);
+  --status-success: #1a7349;
+  --status-success-bg: rgba(42, 138, 93, 0.12);
+  --status-warning: #8f5a12;
+  --status-warning-bg: rgba(200, 131, 55, 0.14);
+  --status-danger: #a83232;
+  --status-danger-bg: rgba(192, 66, 66, 0.1);
+  --status-info: #9c4a22;
+  --status-info-bg: rgba(197, 107, 68, 0.08);
+
+  --btn-primary-bg: #1f1915;
+  --btn-primary-text: #faf6f0;
+  --btn-primary-hover: #332b25;
+  --btn-accent-bg: #a8501f;
+  --btn-accent-text: #ffffff;
+  --btn-accent-hover: #8f4318;
+
+  --glow-color: rgba(197, 107, 68, 0.06);
+
+  --shadow-soft: 0 10px 28px rgba(66, 44, 30, 0.08);
+  --shadow-hover: 0 18px 40px rgba(66, 44, 30, 0.14);
+
+  color-scheme: light;
+}
+
+/* =========================================================
+   3. BASE / RESET
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1,
+h2 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--accent-light);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--accent-surface);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* =========================================================
+   4. LAYOUT HELPERS
+   ========================================================= */
+
+.container {
+  width: min(1200px, 90%);
+  margin-inline: auto;
+}
+
+/* =========================================================
+   5. SHARED COMPONENT CLASSES
+   ========================================================= */
+
+/* --- Buttons (pill geometry) --- */
+.btn-primary,
+.btn-accent,
+.btn-secondary,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: transform 0.2s ease, background-color 0.2s ease,
+    border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary {
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: none;
+}
+
+.btn-primary:hover {
+  background-color: var(--btn-primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-accent {
+  background-color: var(--btn-accent-bg);
+  color: var(--btn-accent-text);
+  border: none;
+}
+
+.btn-accent:hover {
+  background-color: var(--btn-accent-hover);
+  transform: scale(1.02);
+}
+
+.btn-secondary,
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-secondary:hover,
+.btn-ghost:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+/* `results-btn` is used on the Voting page too, where Results.css may not have
+   loaded, so its definition lives in the global sheet. */
+.results-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.results-btn:hover {
+  transform: translateY(-2px);
+}
+
+.results-btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: none;
+  box-shadow: var(--shadow-soft);
+}
+
+.results-btn-primary:hover {
+  background: var(--btn-primary-hover);
+}
+
+.results-btn-secondary {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.results-btn-secondary:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.results-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* --- Cards --- */
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+/* --- Badges / status pills --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-accent {
+  background: var(--accent-surface);
+  color: var(--accent-primary);
+  border-color: var(--border-accent);
+}
+
+.badge-success {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+}
+
+.badge-warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.badge-danger {
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* --- Form controls --- */
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.input,
+.field-input {
+  width: 100%;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input:focus,
+.field-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-surface);
+}
+
+.input::placeholder,
+.field-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* --- Alerts --- */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-input);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.alert-error {
+  background: var(--status-danger-bg);
+  border: 1px solid var(--status-danger);
+  color: var(--status-danger);
+}
+
+.alert-success {
+  background: var(--status-success-bg);
+  border: 1px solid var(--status-success);
+  color: var(--status-success);
+}
+
+.alert-info {
+  background: var(--status-info-bg);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-light);
+}
+
+/* --- Eyebrow labels (uppercase mono markers) --- */
+.eyebrow,
+.aura-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* --- Spinners --- */
+@keyframes aura-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aura-spin {
+  animation: aura-spin 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

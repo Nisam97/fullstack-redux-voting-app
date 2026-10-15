@@ -541,7 +541,7 @@ function Admin() {
         <header className="admin-header">
           <div className="admin-title-area">
             <h1>
-              <ShieldCheck size={32} style={{ color: "#818cf8" }} />
+              <ShieldCheck size={32} style={{ color: "var(--accent-primary)" }} />
               Admin Panel
             </h1>
             <p className="admin-subtitle">
@@ -601,9 +601,9 @@ function Admin() {
           <div
             className="admin-alert"
             style={{
-              background: "rgba(245, 158, 11, 0.15)",
-              borderColor: "rgba(245, 158, 11, 0.35)",
-              color: "#fbbf24",
+              background: "var(--status-warning-bg)",
+              borderColor: "var(--status-warning)",
+              color: "var(--status-warning)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center"
@@ -641,46 +641,46 @@ function Admin() {
           </div>
 
           <div className="admin-stat-card">
-            <span className="admin-stat-label" style={{ color: "#4ade80" }}>
+            <span className="admin-stat-label" style={{ color: "var(--status-success)" }}>
               <Play size={14} /> Live / Open
             </span>
-            <span className="admin-stat-val" style={{ color: "#4ade80" }}>
+            <span className="admin-stat-val" style={{ color: "var(--status-success)" }}>
               {openSessions}
             </span>
           </div>
 
           <div className="admin-stat-card">
-            <span className="admin-stat-label" style={{ color: "#fbbf24" }}>
+            <span className="admin-stat-label" style={{ color: "var(--status-warning)" }}>
               <Clock size={14} /> Pending
             </span>
-            <span className="admin-stat-val" style={{ color: "#fbbf24" }}>
+            <span className="admin-stat-val" style={{ color: "var(--status-warning)" }}>
               {pendingSessions}
             </span>
           </div>
 
           <div className="admin-stat-card">
-            <span className="admin-stat-label" style={{ color: "#c084fc" }}>
+            <span className="admin-stat-label" style={{ color: "var(--accent-light)" }}>
               <Trophy size={14} /> Completed
             </span>
-            <span className="admin-stat-val" style={{ color: "#c084fc" }}>
+            <span className="admin-stat-val" style={{ color: "var(--accent-light)" }}>
               {completedSessions}
             </span>
           </div>
 
           <div className="admin-stat-card">
-            <span className="admin-stat-label" style={{ color: "#38bdf8" }}>
+            <span className="admin-stat-label" style={{ color: "var(--accent-primary)" }}>
               <Users size={14} /> Active Voters
             </span>
-            <span className="admin-stat-val" style={{ color: "#38bdf8" }}>
+            <span className="admin-stat-val" style={{ color: "var(--accent-primary)" }}>
               {totalVoters}
             </span>
           </div>
 
           <div className="admin-stat-card">
-            <span className="admin-stat-label" style={{ color: "#94a3b8" }}>
+            <span className="admin-stat-label" style={{ color: "var(--text-muted)" }}>
               <Archive size={14} /> Archived
             </span>
-            <span className="admin-stat-val" style={{ color: "#94a3b8" }}>
+            <span className="admin-stat-val" style={{ color: "var(--text-muted)" }}>
               {archivedSessions}
             </span>
           </div>
@@ -709,11 +709,11 @@ function Admin() {
               className="admin-card admin-empty-card"
               data-testid="admin-empty-sessions"
             >
-              <AlertCircle size={44} style={{ marginBottom: "1rem", color: "#64748b" }} />
-              <h3 style={{ color: "#f8fafc", margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>
+              <AlertCircle size={44} style={{ marginBottom: "1rem", color: "var(--text-muted)" }} />
+              <h3 style={{ color: "var(--text-primary)", margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>
                 No sessions yet.
               </h3>
-              <p style={{ margin: "0 0 1.5rem 0", color: "#94a3b8", maxWidth: "420px" }}>
+              <p style={{ margin: "0 0 1.5rem 0", color: "var(--text-muted)", maxWidth: "420px" }}>
                 There are currently no voting sessions registered. Click below to initialize your first tournament.
               </p>
               <button
@@ -777,9 +777,9 @@ function Admin() {
                               alignItems: "center",
                               gap: "0.3rem",
                               fontSize: "0.8rem",
-                              color: "#38bdf8",
-                              background: "rgba(56, 189, 248, 0.15)",
-                              border: "1px solid rgba(56, 189, 248, 0.3)",
+                              color: "var(--accent-primary)",
+                              background: "var(--status-info-bg)",
+                              border: "1px solid var(--border-accent)",
                               padding: "0.2rem 0.55rem",
                               borderRadius: "6px",
                               fontWeight: 700
@@ -797,9 +797,9 @@ function Admin() {
                               alignItems: "center",
                               gap: "0.3rem",
                               fontSize: "0.8rem",
-                              color: "#fbbf24",
-                              background: "rgba(245, 158, 11, 0.2)",
-                              border: "1px solid rgba(245, 158, 11, 0.4)",
+                              color: "var(--status-warning)",
+                              background: "var(--status-warning-bg)",
+                              border: "1px solid var(--status-warning)",
                               padding: "0.2rem 0.55rem",
                               borderRadius: "6px",
                               fontWeight: 700
@@ -817,9 +817,9 @@ function Admin() {
                               alignItems: "center",
                               gap: "0.3rem",
                               fontSize: "0.85rem",
-                              color: "#38bdf8",
-                              background: "rgba(56, 189, 248, 0.12)",
-                              border: "1px solid rgba(56, 189, 248, 0.25)",
+                              color: "var(--accent-primary)",
+                              background: "var(--status-info-bg)",
+                              border: "1px solid var(--border-accent)",
                               padding: "0.2rem 0.55rem",
                               borderRadius: "6px",
                               fontWeight: 700,
@@ -838,7 +838,7 @@ function Admin() {
                             alignItems: "center",
                             gap: "0.35rem",
                             fontSize: "0.85rem",
-                            color: "#38bdf8",
+                            color: "var(--accent-primary)",
                             fontWeight: 600
                           }}
                           data-testid={`session-voters-${session.id}`}
@@ -853,7 +853,7 @@ function Admin() {
                             alignItems: "center",
                             gap: "0.35rem",
                             fontSize: "0.85rem",
-                            color: "#a5b4fc",
+                            color: "var(--accent-light)",
                             fontWeight: 500
                           }}
                           data-testid={`session-timer-duration-${session.id}`}
@@ -875,21 +875,21 @@ function Admin() {
                     {/* Metadata & Round Preview */}
                     <div className="admin-round-preview">
                       <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-                        <span style={{ color: "#94a3b8" }}>
-                          Total Entries: <strong style={{ color: "#f8fafc" }}>{entryCount}</strong>
+                        <span style={{ color: "var(--text-secondary)" }}>
+                          Total Entries: <strong style={{ color: "var(--text-primary)" }}>{entryCount}</strong>
                         </span>
 
                         <span
-                          style={{ color: "#94a3b8", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+                          style={{ color: "var(--text-secondary)", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
                           data-testid={`admin-duration-${session.id}`}
                         >
-                          <Clock size={14} /> Voting time: <strong style={{ color: "#f8fafc" }}>{configuredDuration} seconds</strong>
+                          <Clock size={14} /> Voting time: <strong style={{ color: "var(--text-primary)" }}>{configuredDuration} seconds</strong>
                         </span>
 
                         {/* Live Pair Matchup Preview for Open Sessions */}
                         {isOpen && activePair.length >= 2 && (
                           <div className="admin-pair-matchup">
-                            <span style={{ color: "#94a3b8" }}>Active Pair:</span>
+                            <span style={{ color: "var(--text-secondary)" }}>Active Pair:</span>
                             <span className="admin-candidate-chip">
                               {activePair[0]}{typeof tally[activePair[0]] === "number" && tally[activePair[0]] > 0 ? ` (${tally[activePair[0]]})` : ""}
                             </span>
@@ -902,27 +902,27 @@ function Admin() {
 
                         {/* Winner Announcement for Completed Sessions */}
                         {isCompleted && winner && (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#f59e0b" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--status-warning)" }}>
                             <Trophy size={16} />
-                            <span>Winner: <strong style={{ color: "#fbbf24" }}>{winner}</strong></span>
+                            <span>Winner: <strong style={{ color: "var(--status-warning)" }}>{winner}</strong></span>
                           </div>
                         )}
 
                         {isPending && (
-                          <span style={{ color: "#fbbf24" }}>
+                          <span style={{ color: "var(--status-warning)" }}>
                             Lobby waiting for administrator to start tournament.
                           </span>
                         )}
 
                         {isArchived && (
-                          <span style={{ color: "#94a3b8" }}>
+                          <span style={{ color: "var(--text-secondary)" }}>
                             Archived session. Tournament is closed.
                           </span>
                         )}
                       </div>
 
                       {session.createdAt && (
-                        <span style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                        <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem" }}>
                           Created: {new Date(session.createdAt).toLocaleDateString()}
                         </span>
                       )}
@@ -1043,7 +1043,7 @@ function Admin() {
           >
             <div className="admin-modal-header">
               <h2 id="create-session-modal-title" className="admin-modal-title">
-                <PlusCircle size={22} style={{ color: "#6366f1" }} />
+                <PlusCircle size={22} style={{ color: "var(--accent-primary)" }} />
                 Create New Tournament Session
               </h2>
               <button
@@ -1165,7 +1165,7 @@ function Admin() {
                   style={{
                     marginTop: "0.5rem",
                     fontSize: "0.85rem",
-                    color: "#818cf8",
+                    color: "var(--accent-primary)",
                     fontWeight: 600
                   }}
                   data-testid="create-session-mode-note"
@@ -1239,7 +1239,7 @@ function Admin() {
                 </div>
               )}
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", borderTop: "1px solid rgba(148, 163, 184, 0.15)", paddingTop: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", borderTop: "1px solid var(--border-subtle)", paddingTop: "1rem" }}>
                 <button
                   type="button"
                   onClick={handleCloseCreateModal}
@@ -1291,10 +1291,10 @@ function Admin() {
             <div className="admin-modal-header">
               <div>
                 <h2 id="manage-session-modal-title" className="admin-modal-title">
-                  <Sliders size={20} style={{ color: "#818cf8" }} />
+                  <Sliders size={20} style={{ color: "var(--accent-primary)" }} />
                   Manage: {managingSession.title || managingDetailed.title || managingSession.id}
                 </h2>
-                <div style={{ fontSize: "0.8rem", color: "#94a3b8", fontFamily: "monospace", marginTop: "0.2rem" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontFamily: "monospace", marginTop: "0.2rem" }}>
                   ID: <code>{managingSession.id}</code>
                 </div>
               </div>
@@ -1332,7 +1332,7 @@ function Admin() {
 
               <div className="admin-manage-stat">
                 <span className="admin-manage-stat-label">Round Timer</span>
-                <span className="admin-manage-stat-val" style={{ color: "#a5b4fc" }}>
+                <span className="admin-manage-stat-val" style={{ color: "var(--accent-light)" }}>
                   {managingDuration}s
                 </span>
               </div>
@@ -1346,7 +1346,7 @@ function Admin() {
 
               <div className="admin-manage-stat">
                 <span className="admin-manage-stat-label">Active Voters</span>
-                <span className="admin-manage-stat-val" style={{ color: "#38bdf8" }}>
+                <span className="admin-manage-stat-val" style={{ color: "var(--accent-primary)" }}>
                   {managingVoterCount}
                 </span>
               </div>
@@ -1357,21 +1357,21 @@ function Admin() {
               <div
                 className="admin-manage-section"
                 style={{
-                  background: "rgba(245, 158, 11, 0.12)",
-                  borderColor: "rgba(245, 158, 11, 0.35)"
+                  background: "var(--status-warning-bg)",
+                  borderColor: "var(--status-warning)"
                 }}
                 data-testid="manage-tie-pending-section"
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-                  <h4 className="admin-manage-section-title" style={{ color: "#fbbf24", margin: 0 }}>
+                  <h4 className="admin-manage-section-title" style={{ color: "var(--status-warning)", margin: 0 }}>
                     <Clock size={16} /> Tie Resolution Window
                   </h4>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "9999px", background: "rgba(245, 158, 11, 0.25)", color: "#fef08a" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "9999px", background: "var(--status-warning-bg)", color: "var(--status-warning)" }}>
                     30s AUTHORITATIVE TIMEOUT
                   </span>
                 </div>
 
-                <p style={{ fontSize: "0.875rem", color: "#f8fafc", margin: "0 0 1rem 0" }}>
+                <p style={{ fontSize: "0.875rem", color: "var(--text-primary)", margin: "0 0 1rem 0" }}>
                   Matchup tied consecutively. As administrator, you may select a winner directly or trigger an immediate coin flip. If no action is taken before timeout, the server will execute an authoritative coin flip automatically.
                 </p>
 
@@ -1386,7 +1386,7 @@ function Admin() {
 
                 <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.5rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: "240px" }}>
-                    <label htmlFor="tie-pick-select" style={{ fontSize: "0.85rem", color: "#cbd5e1", whiteSpace: "nowrap" }}>
+                    <label htmlFor="tie-pick-select" style={{ fontSize: "0.85rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                       Pick Winner:
                     </label>
                     <select
@@ -1434,7 +1434,7 @@ function Admin() {
             {isManagingOpen && !isManagingTiePending && (
               <div className="admin-manage-section" data-testid="manage-live-section">
                 <h4 className="admin-manage-section-title">
-                  <Play size={15} style={{ color: "#4ade80" }} /> Live Round Status
+                  <Play size={15} style={{ color: "var(--status-success)" }} /> Live Round Status
                 </h4>
                 {managingTimer && (
                   <div style={{ marginBottom: "0.75rem" }}>
@@ -1443,7 +1443,7 @@ function Admin() {
                 )}
                 {managingPair.length >= 2 ? (
                   <div className="admin-pair-matchup" style={{ marginTop: "0.5rem" }}>
-                    <span style={{ color: "#94a3b8" }}>Active Pair:</span>
+                    <span style={{ color: "var(--text-muted)" }}>Active Pair:</span>
                     <span className="admin-candidate-chip">
                       {managingPair[0]} ({managingTally[managingPair[0]] || 0} votes)
                     </span>
@@ -1453,7 +1453,7 @@ function Admin() {
                     </span>
                   </div>
                 ) : (
-                  <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.85rem" }}>
+                  <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }}>
                     Round is active. Voters are currently participating.
                   </p>
                 )}
@@ -1462,23 +1462,23 @@ function Admin() {
 
             {/* Completed Winner Details */}
             {isManagingCompleted && (
-              <div className="admin-manage-section" style={{ background: "rgba(245, 158, 11, 0.1)", borderColor: "rgba(245, 158, 11, 0.25)" }} data-testid="manage-completed-section">
-                <h4 className="admin-manage-section-title" style={{ color: "#fbbf24" }}>
+              <div className="admin-manage-section" style={{ background: "var(--status-warning-bg)", borderColor: "var(--status-warning-bg)" }} data-testid="manage-completed-section">
+                <h4 className="admin-manage-section-title" style={{ color: "var(--status-warning)" }}>
                   <Trophy size={16} /> Tournament Complete
                 </h4>
-                <p style={{ margin: 0, color: "#f8fafc", fontSize: "0.95rem" }}>
-                  Decisive Winner: <strong style={{ color: "#fbbf24", fontSize: "1.1rem" }}>{managingWinner || "Determined"}</strong>
+                <p style={{ margin: 0, color: "var(--text-primary)", fontSize: "0.95rem" }}>
+                  Decisive Winner: <strong style={{ color: "var(--status-warning)", fontSize: "1.1rem" }}>{managingWinner || "Determined"}</strong>
                 </p>
               </div>
             )}
 
             {/* Archived Notice */}
             {isManagingArchived && (
-              <div className="admin-manage-section" style={{ background: "rgba(148, 163, 184, 0.1)", borderColor: "rgba(148, 163, 184, 0.2)" }} data-testid="manage-archived-section">
-                <h4 className="admin-manage-section-title" style={{ color: "#94a3b8" }}>
+              <div className="admin-manage-section" style={{ background: "var(--border-subtle)", borderColor: "var(--border-subtle)" }} data-testid="manage-archived-section">
+                <h4 className="admin-manage-section-title" style={{ color: "var(--text-muted)" }}>
                   <Archive size={16} /> Session Archived
                 </h4>
-                <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.85rem" }}>
+                <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.85rem" }}>
                   This session is permanently archived. Live voting is closed and records are retained for historical reference.
                 </p>
               </div>
@@ -1486,13 +1486,13 @@ function Admin() {
 
             {/* Participant Management (Secured Sessions) */}
             {isManagingSecured && (
-              <div className="admin-manage-section" style={{ background: "rgba(56, 189, 248, 0.05)", borderColor: "rgba(56, 189, 248, 0.25)" }} data-testid="manage-participants-section">
+              <div className="admin-manage-section" style={{ background: "var(--accent-surface)", borderColor: "var(--border-accent)" }} data-testid="manage-participants-section">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-                  <h4 className="admin-manage-section-title" style={{ color: "#38bdf8", margin: 0 }}>
+                  <h4 className="admin-manage-section-title" style={{ color: "var(--accent-primary)", margin: 0 }}>
                     <Users size={16} /> Participant Access &amp; Security
                   </h4>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>Mode:</span>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Mode:</span>
                     <button
                       type="button"
                       onClick={() => handleSwitchWhoCanJoin(managingWhoCanJoin === "allowlist" ? "approval" : "allowlist")}
@@ -1516,23 +1516,23 @@ function Admin() {
                   <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
                     {managingWhoCanJoin === "allowlist" ? (
                       <>
-                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
-                          Allowlisted: <strong style={{ color: "#38bdf8" }}>{participantsData.counts.allowlistedCount || 0}</strong>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                          Allowlisted: <strong style={{ color: "var(--accent-primary)" }}>{participantsData.counts.allowlistedCount || 0}</strong>
                         </div>
-                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
-                          Joined: <strong style={{ color: "#4ade80" }}>{participantsData.counts.joinedCount || 0}</strong>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                          Joined: <strong style={{ color: "var(--status-success)" }}>{participantsData.counts.joinedCount || 0}</strong>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
-                          Pending Requests: <strong style={{ color: "#fbbf24" }}>{participantsData.counts.pendingCount || 0}</strong>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                          Pending Requests: <strong style={{ color: "var(--status-warning)" }}>{participantsData.counts.pendingCount || 0}</strong>
                         </div>
-                        <div style={{ fontSize: "0.85rem", color: "#4ade80" }}>
-                          Approved: <strong style={{ color: "#4ade80" }}>{participantsData.counts.approvedCount || 0}</strong>
+                        <div style={{ fontSize: "0.85rem", color: "var(--status-success)" }}>
+                          Approved: <strong style={{ color: "var(--status-success)" }}>{participantsData.counts.approvedCount || 0}</strong>
                         </div>
-                        <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
-                          Rejected: <strong style={{ color: "#ef4444" }}>{participantsData.counts.rejectedCount || 0}</strong>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                          Rejected: <strong style={{ color: "var(--status-danger)" }}>{participantsData.counts.rejectedCount || 0}</strong>
                         </div>
                       </>
                     )}
@@ -1563,14 +1563,14 @@ function Admin() {
                       </button>
                     </div>
 
-                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid rgba(148, 163, 184, 0.15)", borderRadius: "8px", padding: "0.5rem" }}>
+                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "0.5rem" }}>
                       {participantsData?.entries && participantsData.entries.length > 0 ? (
                         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                           {participantsData.entries.map((entry) => (
-                            <li key={entry.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.3rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
-                              <span style={{ color: "#f8fafc" }}>{entry.email}</span>
+                            <li key={entry.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.3rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid var(--border-subtle)" }}>
+                              <span style={{ color: "var(--text-primary)" }}>{entry.email}</span>
                               <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                                <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: entry.status === "joined" ? "rgba(74, 222, 128, 0.15)" : "rgba(56, 189, 248, 0.15)", color: entry.status === "joined" ? "#4ade80" : "#38bdf8" }}>
+                                <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: entry.status === "joined" ? "var(--status-success-bg)" : "var(--status-info-bg)", color: entry.status === "joined" ? "var(--status-success)" : "var(--accent-primary)" }}>
                                   {entry.status}
                                 </span>
                                 <button
@@ -1587,7 +1587,7 @@ function Admin() {
                           ))}
                         </ul>
                       ) : (
-                        <p style={{ margin: 0, padding: "0.5rem", color: "#94a3b8", fontSize: "0.85rem", textAlign: "center" }}>
+                        <p style={{ margin: 0, padding: "0.5rem", color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
                           No emails on the allowlist yet. Add emails above to grant voter access.
                         </p>
                       )}
@@ -1598,19 +1598,19 @@ function Admin() {
                 {/* Approval Mode Controls */}
                 {managingWhoCanJoin === "approval" && (
                   <div>
-                    <h5 style={{ margin: "0 0 0.5rem 0", color: "#fbbf24", fontSize: "0.85rem" }}>
+                    <h5 style={{ margin: "0 0 0.5rem 0", color: "var(--status-warning)", fontSize: "0.85rem" }}>
                       Pending Join Requests
                     </h5>
-                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid rgba(148, 163, 184, 0.15)", borderRadius: "8px", padding: "0.5rem", marginBottom: "0.75rem" }}>
+                    <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "0.5rem", marginBottom: "0.75rem" }}>
                       {participantsData?.entries && participantsData.entries.filter((e) => e.status === "pending").length > 0 ? (
                         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                           {participantsData.entries
                             .filter((e) => e.status === "pending")
                             .map((req) => (
-                              <li key={req.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                              <li key={req.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem 0.5rem", fontSize: "0.85rem", borderBottom: "1px solid var(--border-subtle)" }}>
                                 <div>
-                                  <div style={{ color: "#f8fafc", fontWeight: 600 }}>{req.displayName || req.email}</div>
-                                  <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{req.email}</div>
+                                  <div style={{ color: "var(--text-primary)", fontWeight: 600 }}>{req.displayName || req.email}</div>
+                                  <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>{req.email}</div>
                                 </div>
                                 <div style={{ display: "flex", gap: "0.4rem" }}>
                                   <button
@@ -1636,7 +1636,7 @@ function Admin() {
                             ))}
                         </ul>
                       ) : (
-                        <p style={{ margin: 0, padding: "0.5rem", color: "#94a3b8", fontSize: "0.85rem", textAlign: "center" }}>
+                        <p style={{ margin: 0, padding: "0.5rem", color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
                           No pending join requests.
                         </p>
                       )}
@@ -1789,7 +1789,7 @@ function Admin() {
             </div>
 
             {/* Modal Footer */}
-            <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid rgba(148, 163, 184, 0.15)", paddingTop: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-subtle)", paddingTop: "1rem" }}>
               <button
                 type="button"
                 onClick={() => setManagingSessionId(null)}
@@ -1818,7 +1818,7 @@ function Admin() {
         >
           <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h3 id="qr-modal-title" style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>
+              <h3 id="qr-modal-title" style={{ margin: 0, fontSize: "1.25rem", color: "var(--text-primary)" }}>
                 Session Share &amp; QR
               </h3>
               <button
@@ -1832,10 +1832,10 @@ function Admin() {
               </button>
             </div>
 
-            <p style={{ color: "#94a3b8", fontSize: "0.9rem", margin: 0 }}>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
               Scan with a mobile camera to join the waiting room lobby:
             </p>
-            <div style={{ fontWeight: 600, color: "#818cf8", margin: "0.25rem 0 1rem 0" }}>
+            <div style={{ fontWeight: 600, color: "var(--accent-primary)", margin: "0.25rem 0 1rem 0" }}>
               {qrModalSession.title || qrModalSession.id}
             </div>
 
@@ -1844,7 +1844,7 @@ function Admin() {
                 <img src={qrDataUrl} alt={`QR Code for ${qrModalSession.id}`} width={240} height={240} />
               </div>
             ) : (
-              <div style={{ padding: "3rem 1rem", color: "#94a3b8" }}>
+              <div style={{ padding: "3rem 1rem", color: "var(--text-muted)" }}>
                 <RefreshCw size={32} className="voting-spinner" />
                 <p>Generating QR Code...</p>
               </div>
@@ -1902,11 +1902,11 @@ function Admin() {
         >
           <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-              <Archive size={44} style={{ color: "#ef4444", marginBottom: "0.75rem" }} />
-              <h3 id="archive-modal-title" style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem", color: "#f8fafc" }}>
+              <Archive size={44} style={{ color: "var(--status-danger)", marginBottom: "0.75rem" }} />
+              <h3 id="archive-modal-title" style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem", color: "var(--text-primary)" }}>
                 Confirm Session Archival
               </h3>
-              <p style={{ color: "#94a3b8", fontSize: "0.9rem", margin: 0 }}>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 }}>
                 Are you sure you want to archive session <strong>{confirmArchiveSessionId}</strong>?
                 This closes all live voting and moves the session to read-only historical state.
               </p>
