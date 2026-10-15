@@ -48,6 +48,8 @@ Stored in `docs/specs/`. Older specs are a single file, `docs/specs/NNNN-title.m
 - Each skill's own report step names the keys it uses and holds the full list, so a receipt always carries at least the subject, the result, and the suggested next step. For `/sync` the keys are written out in `.agents/skills/sync/agent-prompt.md` step 7.
 - This contract is written here as well as in the skills, on purpose. `.agents/` and `.claude/` are gitignored, so `npx skills add` overwrites a skill's own copy of the rule, while this file is tracked and is what the next run still reads.
 
+Note: the repo also contains the same skill list text elsewhere (for example in CLAUDE.md). Any side that names `.agents/` or `.claude/` paths must use the file-local path form expected by the referencing file. The root context files use paths relative to repo root, so a pointer that is correct in this file is not automatically correct in another file, and vice versa.
+
 ## Rules
 
 - The server is authoritative. Voting math, tallies, timers, and round advancement run only on the backend; the client renders state and emits intent, never computing quorum or dispatching `NEXT` on its own.
@@ -84,10 +86,10 @@ All Agent Skills install to the repo root `.agents/skills/`, whatever package th
 
 - Declined: Socket.io, Mongoose, Nodemailer, React Router, Recharts (tool discovery skipped by the engineer, nothing was searched or installed); React 19, Vite 8, Redux Toolkit, Playwright, Mocha, chai, mongodb-memory-server, axe-core, csv-parse, bcrypt, jsonwebtoken, qrcode, lucide-react (offered again 2026-10-15 and declined, nothing searched or installed)
 
-## Context files
+## Context files-	[voting-client/AGENTS.md](voting-client/AGENTS.md): React 19 and Redux Toolkit client conventions.
+-	[voting-server/AGENTS.md](voting-server/AGENTS.md): authoritative engine, auth, timers, persistence.
 
-- [voting-client/AGENTS.md](voting-client/AGENTS.md): React 19 and Redux Toolkit client conventions.
-- [voting-server/AGENTS.md](voting-server/AGENTS.md): authoritative engine, auth, timers, persistence.
+Note: the repo also contains the same skill list text elsewhere (for example in CLAUDE.md). Any side that names `.agents/` or `.claude/` paths must use the file-local path form expected by the referencing file. The root context files use paths relative to repo root, so a pointer that is correct in this file is not automatically correct in another file, and vice versa.
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
 

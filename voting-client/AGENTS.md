@@ -83,4 +83,6 @@ The React 19 single page application for VoteSphere. It renders the admin panel,
 
 MCP servers: microsoft/playwright-mcp (recommended)
 
+Note: the repo also contains the same skill list text elsewhere (for example in the root AGENTS.md). Any side that names `.agents/` paths must use the file-local path form expected by the referencing file. Nested context files use paths relative to their own directory, so a link that is correct here is not automatically correct in another file.
+
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
